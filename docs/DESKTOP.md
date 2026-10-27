@@ -44,19 +44,26 @@ new settings clears the previous service-availability display until new checks s
 
 ## Daily workflow
 
-1. Keep the installed Ollama server/model and authorized Zetaris deployment running when those services
-   are needed. They are external installations; model weights and Docker/Zetaris are not inside the app.
+1. Install Ollama and pull the selected model. On launch PartLens tries to start a stopped loopback
+   `ollama serve` in the background; it never downloads models or contacts a remote/cloud provider. The
+   authorized Zetaris deployment is optional and only needed for the Zetaris supplier modes.
 2. Click **Check local services** in the sidebar for real diagnostics. A stopped service is reported independently.
-3. Describe an idea in **New design** mode and click **Send**. Answer requirement questions in the same
-   composer, or choose **Leave unanswered**. Proposed defaults remain provisional.
+3. Describe an idea in **New design** mode and click **Send**. Each requirement question offers three
+   choices: type an exact answer in the composer (**Specify in chat**), **Let AI set requirement** (recorded
+   as a provisional, non-binding agent default) or **Leave unanswered**. Only typed answers bind.
+   Assistant commentary renders as formatted Markdown and stays labeled as commentary.
 4. Choose **Review a BOM** on the welcome screen for the demo, or **Attach BOM** to select a CSV.
    Synthetic mode selects the distributable synthetic BOM; official modes select the approved Easyduino example.
 5. Open **Evidence** for recorded requirements, architecture, checks, sourcing, costs and tool activity.
+   Results render as structured cards with PASS / FAIL / UNVERIFIED badges and source links.
+   **Open in BOM workspace** (on a New Design report) imports the generated BOM as a new immutable project revision and runs
+   matching, availability and replacement checks; unsourced mechanical placeholders are marked DNP.
    **Update requirement** records an explicit typed owner answer and independently revalidates its effects.
    **Recheck** re-executes the current design checks/sourcing without calling the model.
 6. Follow-up messages explain the saved report. They are labeled **Commentary, not a decision** and cannot
    change requirements or engineering results. For a new investigation, start **New conversation**.
-7. Saved chats appear in the sidebar. **BOM workspace** opens the detailed review page in the same window.
+7. Saved chats appear in the sidebar; the delete control hides a chat (a tombstone is appended and its
+   journal stays on disk). **BOM workspace** opens the detailed review page in the same window.
    Load a demo or CSV, choose **Run checks** for deterministic review or **Local agent review** for actual
    model tool use, inspect replacement scope/application results, compare costs, or **Recall & recheck**.
    BOM questions use the shared web dialog. File pickers remain native Windows dialogs.
@@ -126,5 +133,5 @@ The executable is built locally and is not Authenticode-signed. No Git signing b
 upload or publication is performed. SSH Git signing and Windows application signing are separate concerns.
 Original code remains Apache-2.0; bundled runtimes keep the notices in **Settings → Storage & services →
 View bundled licenses and notices** and [THIRD_PARTY.md](../THIRD_PARTY.md). The old README is retained in
-[the historical snapshot](hackathon/README-BEFORE-DESKTOP.md). Earlier standalone candidates and all
+the historical snapshot. Earlier standalone candidates and all
 negative runs remain historical, rather than being replaced by this application build.

@@ -60,7 +60,7 @@ synthetic regressions were written with Codex during the build window, reusing t
 supplier/check/cost/memory code. The smart product example is original to this request; no private design,
 benchmark or implementation was inspected or copied. The owner delegated choices rather than confirming
 numeric requirements. Manufacturer references and their limitations are listed in
-[DESIGN-GENERATION.md](DESIGN-GENERATION.md) and [THIRD_PARTY.md](../../THIRD_PARTY.md); their pre-existing
+the Design Generation record and [THIRD_PARTY.md](../../THIRD_PARTY.md); their pre-existing
 documents inform paraphrased facts, not copied code/schematics. Local Qwen and H-MEM remain pre-existing
 dependencies. Real supplier/run data stays internal. No Cursor, paid inference, CAD validation, new remote,
 repository publication or submission is claimed.
@@ -74,7 +74,7 @@ the controller/check engine handles mandatory validation and factual status. Neg
 test failures are retained. The actual owner reply “Monochrome” was relayed verbatim and is the only
 new confirmed badge specification. Independent source-checkout setup downloads the already-disclosed
 public bridge/dependencies; it does not publish source or private data. Cursor and paid inference were
-not used. See [ARCHITECTURE-CORRECTION.md](ARCHITECTURE-CORRECTION.md).
+not used. See the Architecture Correction record.
 
 The final workflow milestone adds original clarification ranking, controller-owned typed-answer recording,
 desktop requirement revision, unapplied arithmetic counterfactuals, sourcing triage and readable views.
@@ -82,7 +82,7 @@ It reuses the disclosed pattern/check/source/memory implementations; no new vend
 private design is reused. Codex wrote and tested these changes during the build window. Actual Qwen
 turns, controller operations, service outages/recovery and failed trials remain separately journaled.
 Repeated Monochrome relays refer to the same earlier owner answer. No paid inference, Cursor usage,
-submission or publication is claimed. See [FINAL-DESIGN-WORKFLOW.md](FINAL-DESIGN-WORKFLOW.md).
+submission or publication is claimed. See the Final Design Workflow record.
 
 Finalization preserves that implementation and adds original count/geometry clarification and consistency
 checks, startup service checks and an explicitly selected Ollama JSON-schema action transport using its
@@ -91,7 +91,7 @@ vendor implementation or private design is reused. Codex wrote the corrections, 
 evaluation helper and finalization materials during the build window. Genuine native/structured trials,
 provenance-helper and repetition failures, service checks and clean installation are reported separately.
 The owner's further delegation is not a numeric confirmation. No paid inference or Cursor was used.
-See [HACKATHON-FINALIZATION.md](HACKATHON-FINALIZATION.md).
+See the Hackathon Finalization record.
 
 The owner subsequently authorized a unified Windows executable and in-app settings. Codex wrote the
 desktop entry point, validated settings/Windows credential storage, resource resolution, build/audit
@@ -118,11 +118,39 @@ dependencies and SDK notices are listed in THIRD_PARTY.md. No Electron, React, p
 new supplier interface or private circuit material is used. Preserved Tkinter code/tests are historical
 compatibility material; they are excluded from the new executable. Actual renderer acceptance and the
 distinction between DOM tests, visual review and live integrations are recorded in
-[WEB-DESKTOP.md](WEB-DESKTOP.md).
+the Web Desktop record.
 
 The owner approved proceeding from the production assessment. Codex wrote the original standard-library
 SQLite project/revision/checkpoint and local human-review/export implementation, shared desktop controls,
 synthetic regressions and documentation during the build window. Existing deterministic checks, official
 supplier adapters, exact user-provenance validator, pywebview and pinned real H-MEM are reused. No new
 third-party implementation, private design, supplier interface, Cursor work or paid inference is added.
-Review is explicitly narrower than manufacturing approval. See [PRODUCTION-FOUNDATION.md](PRODUCTION-FOUNDATION.md).
+Review is explicitly narrower than manufacturing approval. See the Production Foundation record.
+
+The owner then requested a dual-rail breadboard power supply New Design and interactive desktop
+improvements (2026-10-26/27). Antigravity wrote the breadboard input, regulator and rail-output patterns,
+the LDO thermal and current-budget checks, the bounded buck-boost alternative and
+`scripts/breadboard_power_design.py`. It also wrote the three-option requirement bar, safe DOM-built
+Markdown rendering, the structured Evidence cards, chat deletion (an append-only tombstone), design-BOM
+transfer into saved projects and opportunistic local Ollama startup, plus the synthetic regressions, during
+the build window. The new patterns cite public manufacturer documentation (Texas Instruments TPS63031,
+Torex XC6206, USB Type-C specification, JST SH) as references only; no vendor implementation, private
+design, new supplier interface, Cursor work or paid inference is added. The existing timestamped supplier
+cache fixtures and deterministic checks are reused. New Design output remains preliminary.
+
+On 2026-10-27 the owner asked for a visual end-to-end test of the breadboard power supply New Design with
+fixes for any app issues. Claude Code (Anthropic) drove the real WebView2 window, inspected screenshots and
+wrote these fixes during the build window: an honest incomplete-cost chat summary, narration quoted from
+recorded checks, batched official JLCPCB discovery and expired-row refresh, per-line tolerance of a bounded
+supplier failure, quantity provenance carried from the owner's actual recorded words in the design-to-BOM
+transfer (replacing a synthesised quote), Markdown escaping for supplier MPNs, and Evidence/composer layout
+fixes, plus synthetic regressions. One official JLCPCB lookup identified the rail-selector header (C49257).
+No paid PartLens inference, private material, new supplier interface or Cursor work is added.
+
+**2026-10-27 first-start setup, BOM agent and submission docs (Claude Code).** Claude Code added a
+first-start screen where users enter their own JLCPCB/Zetaris keys (stored only through the existing
+Windows DPAPI settings; never in the repository or executable), stopped marking unsourced generated roles
+as DNP, clarified AI-default wording, and fixed a local-agent BOM review deadlock: the controller now records
+the owner's typed build quantity verbatim instead of relying on a model paraphrase. It also wrote the start
+guide and submission summary. A credential audit found no saved key value in Git history, tracked files or
+the executable. No paid PartLens inference, private material or Cursor work is added.
