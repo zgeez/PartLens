@@ -1,0 +1,9 @@
+Cirquill
+Copyright 2026 Ziad Ghanem
+
+This product includes software developed for the Cirquill project and licensed
+under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components keep their own licences. They are listed in
+THIRD_PARTY.md together with how each one is obtained (none are committed
+unless stated there).

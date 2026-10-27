@@ -1,0 +1,45 @@
+# Local excluded directories and fixtures
+/experiments/
+**/*benchmark*
+**/*badge*
+
+# Editor and local AI agent workspace files
+/.github/modernize/
+.vscode/
+.idea/
+.cursorignore
+AGENTS.md
+CLAUDE.md
+docs/AI_STATE.md
+docs/DECISIONS.md
+scripts/ai_handoff.py
+tests/test_ai_handoff.py
+scripts/commit_all.ps1
+
+# Credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Node
+node_modules/
+
+# Vendored third-party engines (fetched by setup scripts, not committed)
+integrations/hmem-bridge/vendor/
+
+# PartLens local state (run records, memory store, caches)
+.partlens/
+
+# Local reference archives
+/*-Business SDK.zip

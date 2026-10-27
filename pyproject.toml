@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "partlens"
+version = "0.1.0"
+description = "PartLens: preliminary electronic design, evidence-backed component selection and BOM verification."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.40"]
+dev = ["pytest>=8"]
+desktop = ["pywebview==6.2.1", "pythonnet==3.2.1; sys_platform == 'win32'"]
+desktop-build = ["pyinstaller==6.22.3"]
+
+[project.scripts]
+partlens = "partlens.cli:main"
+partlens-app = "partlens.desktop:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "live: needs external services or credentials (skipped unless configured)",
+]

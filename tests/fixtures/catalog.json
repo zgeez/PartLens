@@ -1,0 +1,75 @@
+[
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-X7R-16V", "mpn": "TESTCAP-0402-104-X7R-16", "manufacturer": "TestCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 16V X7R 10% 0402",
+   "params": {"capacitance": "100nF", "voltage_rating": "16V", "dielectric": "X7R", "tolerance_pct": "10%", "temp_range": "-55~125"},
+   "stock": 500000, "price_breaks": [[1, "0.0040"], [100, "0.0020"], [1000, "0.0015"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-X7R-16V"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-Y5V-16V", "mpn": "TESTCAP-0402-104-Y5V-16", "manufacturer": "TestCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 16V Y5V +80/-20% 0402",
+   "params": {"capacitance": "100nF", "voltage_rating": "16V", "dielectric": "Y5V", "tolerance_pct": "80%", "temp_range": "-30~85"},
+   "stock": 900000, "price_breaks": [[1, "0.0020"], [100, "0.0010"], [1000, "0.0008"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-Y5V-16V"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-X5R-25V", "mpn": "TESTCAP-0402-104-X5R-25", "manufacturer": "TestCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 25V X5R 10% 0402",
+   "params": {"capacitance": "100nF", "voltage_rating": "25V", "dielectric": "X5R", "tolerance_pct": "10%", "temp_range": "-55~85"},
+   "stock": 300000, "price_breaks": [[1, "0.0030"], [100, "0.0016"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-X5R-25V"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-X7R-6V3", "mpn": "TESTCAP-0402-104-X7R-6V3", "manufacturer": "TestCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 6.3V X7R 10% 0402",
+   "params": {"capacitance": "100nF", "voltage_rating": "6.3V", "dielectric": "X7R", "tolerance_pct": "10%", "temp_range": "-55~125"},
+   "stock": 300000, "price_breaks": [[1, "0.0025"], [100, "0.0012"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-X7R-6V3"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-X7R-50V-EXT", "mpn": "TESTCAP-0402-104-X7R-50", "manufacturer": "OtherCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 50V X7R 10% 0402",
+   "params": {"capacitance": {"value": "100nF", "evidence": {"kind": "datasheet", "locator": "fixture://datasheets/othercap.pdf#page=2", "excerpt": "Capacitance 0.1 uF"}},
+              "voltage_rating": {"value": "50V", "evidence": {"kind": "datasheet", "locator": "fixture://datasheets/othercap.pdf#page=2", "excerpt": "Rated voltage 50 VDC"}},
+              "dielectric": "X7R", "tolerance_pct": "10%", "temp_range": "-55~125"},
+   "stock": 200000, "price_breaks": [[1, "0.0030"], [100, "0.0012"], [1000, "0.0009"]],
+   "assembly_class": "extended", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-X7R-50V-EXT"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-X7R-0603", "mpn": "TESTCAP-0603-104-X7R-50", "manufacturer": "TestCo",
+   "category": "capacitor", "package": "0603", "description": "100nF 50V X7R 10% 0603",
+   "params": {"capacitance": "100nF", "voltage_rating": "50V", "dielectric": "X7R", "tolerance_pct": "10%", "temp_range": "-55~125"},
+   "stock": 800000, "price_breaks": [[1, "0.0020"], [100, "0.0010"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-X7R-0603"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-NODIEL", "mpn": "TESTCAP-0402-104-UNK", "manufacturer": "NoNameCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 16V 0402",
+   "params": {"capacitance": "100nF", "voltage_rating": "16V", "tolerance_pct": "10%"},
+   "stock": 100000, "price_breaks": [[1, "0.0010"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-C100N-NODIEL"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-C100N-X7R-STALE", "mpn": "TESTCAP-0402-104-X7R-25", "manufacturer": "TestCo",
+   "category": "capacitor", "package": "0402", "description": "100nF 25V X7R 10% 0402",
+   "params": {"capacitance": "100nF", "voltage_rating": "25V", "dielectric": "X7R", "tolerance_pct": "10%", "temp_range": "-55~125"},
+   "stock": 400000, "price_breaks": [[1, "0.0020"], [100, "0.0011"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-08-23T00:00:00Z", "source": "fixture://catalog/TEST-C100N-X7R-STALE"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-R10K-1-0402", "mpn": "TESTRES-0402-10K-1", "manufacturer": "TestCo",
+   "category": "resistor", "package": "0402", "description": "10k 1% 1/16W 0402",
+   "params": {"resistance": "10k", "tolerance_pct": "1%", "power_w": "1/16W", "temp_range": "-55~155"},
+   "stock": 1000000, "price_breaks": [[1, "0.0030"], [100, "0.0015"], [500, "0.0008"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-R10K-1-0402"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-R10K-1-0402-ALT", "mpn": "TESTRES-0402-10K-1-HP", "manufacturer": "OtherCo",
+   "category": "resistor", "package": "0402", "description": "10k 1% 1/10W 0402",
+   "params": {"resistance": "10k", "tolerance_pct": "1%", "power_w": "1/10W", "temp_range": "-55~155"},
+   "stock": 2000000, "price_breaks": [[1, "0.0020"], [100, "0.0010"], [500, "0.0005"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-R10K-1-0402-ALT"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-LDO-A", "mpn": "TESTLDO-33-A", "manufacturer": "TestCo",
+   "category": "ic", "package": "SOT-23-5", "description": "3.3V 300mA LDO, Vin max 6V",
+   "params": {"supply_voltage_max": {"value": "6V", "rating_kind": "recommended_operating"}, "output_voltage": "3.3"},
+   "stock": 20000, "price_breaks": [[1, "0.1200"], [100, "0.0800"]],
+   "assembly_class": "extended", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-LDO-A"},
+
+  {"supplier": "fixture", "supplier_pn": "TEST-LDO-B", "mpn": "TESTLDO-33-B", "manufacturer": "OtherCo",
+   "category": "ic", "package": "SOT-23-5", "description": "3.3V 300mA LDO, Vin max 5V",
+   "params": {"supply_voltage_max": {"value": "5V", "rating_kind": "recommended_operating"}, "output_voltage": "3.3"},
+   "stock": 50000, "price_breaks": [[1, "0.0600"], [100, "0.0400"]],
+   "assembly_class": "basic", "lifecycle": "active", "retrieved_at": "2026-10-22T00:00:00Z", "source": "fixture://catalog/TEST-LDO-B"}
+]

@@ -1,0 +1,6 @@
+"Reference","Value","Footprint","Qty","MPN","Manufacturer","Supplier Part","DNP"
+"C1,C2,C3,C4","100nF","Capacitor_SMD:C_0402_1005Metric","4","TESTCAP-0402-104-X7R-16","TestCo","",""
+"R1,R2,R3,R4,R5,R6","10k","Resistor_SMD:R_0402_1005Metric","6","TESTRES-0402-10K-1","TestCo","",""
+"U1","TESTLDO-33-A","Package_TO_SOT_SMD:SOT-23-5","1","TESTLDO-33-A","TestCo","",""
+"J1","USB_C","Connector_USB:USB_C_Receptacle","1","","","",""
+"R7","0R","Resistor_SMD:R_0402_1005Metric","1","","","","DNP"
