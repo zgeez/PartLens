@@ -216,18 +216,20 @@ manual visual acceptance; and owner-local signing-key availability. API access a
 The genuine local Qwen + official JLCPCB + actual Zetaris workflow and separate cold recall have now been
 observed. A/C executed ten authenticated HTTP requests and 88 successful read-only Zetaris SELECTs; the
 controller enforced all five recalled-item rechecks. The desktop also received actual native Windows
-visual review. See [MILESTONE-5.md](MILESTONE-5.md) for run IDs, model/controller attribution, preserved
+visual review. See the Milestone 5 record for run IDs, model/controller attribution, preserved
 evaluator correction, 245-test result and replay counts.
 
 The owner-supplied Business SDK archive contains compiled Java classes but no bundled field documentation.
 It was inspected without execution or decompilation and remains ignored. Currency, MOQ, multiples and
 assembly-flag meaning remain unresolved. Safe inspected response headers supplied Content-Type and Date,
 not commercial semantics; no undocumented currency control was sent.
-[Support questions](JLCPCB-SUPPORT-QUESTIONS.md) are prepared and have not been sent.
+Support questions are prepared and have not been sent.
 
 `--jlc-leads` optionally discovers explicit code leads from the retained internal fixture; all subsequent
 qualifications use official records. `--jlc --zetaris` no longer implicitly adds the legacy supplier table.
-Per-session limits are 12 HTTP attempts and 40 distinct codes by default, including retries, in addition
-to the existing request/cache/timeout bounds. Recorded-source replay is offline and makes no new sponsor
+Per-session limits are 12 HTTP attempts and 60 distinct codes by default, including retries, in addition
+to the existing request/cache/timeout bounds. (2026-10-27: the code limit was 40 until a 16-line generated
+breadboard-power BOM needed ~42 codes; desktop BOM checks now prefetch every line's leads in shared
+25-code batches and refresh expired rows together, so that review used 3 requests instead of exhausting 12.) Recorded-source replay is offline and makes no new sponsor
 operation. Data-usage/branding permission, commercial definitions, complete quotes and signing availability
 remain unresolved despite operational API access.

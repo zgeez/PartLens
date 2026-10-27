@@ -94,7 +94,7 @@ class JLCClient:
                  recorder: RunRecorder | None = None, timeout: float = 20, ttl: int = 300,
                  attempts: int = 3, transport: Callable | None = None,
                  sleep: Callable[[float], None] = time.sleep, max_requests: int = 12,
-                 max_distinct_codes: int = 40) -> None:
+                 max_distinct_codes: int = 60) -> None:
         if not 0 < timeout <= 60 or not 0 <= ttl <= 3600 or not 1 <= attempts <= 3:
             raise JLCError("invalid bounded timeout, cache TTL or retry count")
         self.cfg, self.cache_dir, self.recorder = cfg, Path(cache_dir), recorder
@@ -373,10 +373,14 @@ class JLCCatalog:
         supplier, _, code = key.partition(":")
         if supplier != "jlcpcb" or not CODE.fullmatch(code):
             return None
-        row = self.rows.get(code)
-        age = (datetime.now(UTC) - datetime.fromisoformat(row["retrieved_at"].replace("Z", "+00:00"))).total_seconds() if row else None
-        if age is None or not 0 <= age <= self.client.ttl:
-            self.prepare([code])
+        now = datetime.now(UTC)
+        def stale(c: str) -> bool:
+            row = self.rows.get(c)
+            return row is None or not 0 <= (now - datetime.fromisoformat(
+                row["retrieved_at"].replace("Z", "+00:00"))).total_seconds() <= self.client.ttl
+        if stale(code):
+            # Refresh expired rows together so freshness does not spend one bounded request per code.
+            self.prepare([code] + [c for c in self.rows if c != code and stale(c)][:MAX_CODES - 1])
         return record_from_row(self.rows[code]) if code in self.rows else None
 
     def find_mpn(self, mpn: str) -> list[PartRecord]:
@@ -391,18 +395,7 @@ class JLCCatalog:
         """Use retained catalogue hints to choose codes; return only official evidence for qualification."""
         if self.leads is None:
             return self.search(category, package, text, limit)
-        candidates: dict[str, PartRecord] = {}
-        prior = self.leads.get("lcsc:" + original.supplier_pn)
-        if prior and normalise_mpn(prior.mpn) == normalise_mpn(original.mpn):
-            for key in prior.suggested_alternates:
-                lead = self.leads.get(key)
-                if lead and (not text or text.lower() in f"{lead.mpn} {lead.description}".lower()):
-                    candidates.setdefault(lead.supplier_pn, lead)
-        for lead in self.leads.search(category, package, text, min(limit, 6)):
-            candidates.setdefault(lead.supplier_pn, lead)
-        candidates = {pn: lead for pn, lead in candidates.items()
-                      if pn != original.supplier_pn and lead.supplier == "lcsc" and CODE.fullmatch(pn)}
-        selected = dict(list(candidates.items())[:min(limit, 6)])
+        selected = self._lead_codes(original, category, package, text, limit)
         self.client._log("jlcpcb_discovery_leads", original=original.key, category=category, package=package,
                          text=text, limit=limit, lead_source=self.provenance["research_leads"],
                          leads=[{"code": pn, "source": p.source, "retrieved_at": p.retrieved_at}
@@ -418,6 +411,28 @@ class JLCCatalog:
                 "scope": "code discovery only; no engineering, price, stock or classification transfer"}
             results.append(record_from_row(self.rows[pn]))
         return results
+
+    def prefetch_discovery(self, requests: list[tuple]) -> None:
+        """Read every line's lead codes in shared bounded batches instead of one request per line."""
+        if self.leads is None:
+            return
+        codes = {pn for args in requests for pn in self._lead_codes(*args)}
+        self.prepare(sorted(codes))
+
+    def _lead_codes(self, original: PartRecord, category: str, package: str | None,
+                    text: str | None, limit: int) -> dict[str, PartRecord]:
+        candidates: dict[str, PartRecord] = {}
+        prior = self.leads.get("lcsc:" + original.supplier_pn)
+        if prior and normalise_mpn(prior.mpn) == normalise_mpn(original.mpn):
+            for key in prior.suggested_alternates:
+                lead = self.leads.get(key)
+                if lead and (not text or text.lower() in f"{lead.mpn} {lead.description}".lower()):
+                    candidates.setdefault(lead.supplier_pn, lead)
+        for lead in self.leads.search(category, package, text, min(limit, 6)):
+            candidates.setdefault(lead.supplier_pn, lead)
+        candidates = {pn: lead for pn, lead in candidates.items()
+                      if pn != original.supplier_pn and lead.supplier == "lcsc" and CODE.fullmatch(pn)}
+        return dict(list(candidates.items())[:min(limit, 6)])
 
 
 class JLCZetarisCatalog:
@@ -464,3 +479,6 @@ class JLCZetarisCatalog:
                      text: str | None, limit: int) -> list[PartRecord]:
         return [part for candidate in self.base.discover_for(original, category, package, text, limit)
                 if (part := self.get(candidate.key)) is not None]
+
+    def prefetch_discovery(self, requests: list[tuple]) -> None:
+        self.base.prefetch_discovery(requests)

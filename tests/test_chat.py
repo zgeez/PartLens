@@ -164,3 +164,16 @@ def test_chat_history_questions_evidence_and_settings_construct(tmp_path):
         assert win is not None
         win.withdraw();win.destroy()
     finally:app.close()
+
+
+def test_incomplete_cost_is_never_rendered_as_a_zero_total():
+    lines=[{'line':'L1','needed':10,'unit_price':'0.0273','extended':None},
+           {'line':'L2','needed':10,'unit_price':None,'extended':None}]
+    cost={'component_complete':False,'parts_total':'0.00','currency':'USD','lines':lines}
+    report={'bom':[{'line_id':'L1','refs':['J5'],'role':{'name':'rail_selector_header','quantity':2,'mpn':'TEST-2.54-1*3P'},
+                    'component':{'manufacturer':'TEST-Mfr','mpn':'TEST-2.54-1*3P','key':'fixture:TEST-1'},'qualification':{'status':'verified'}}],
+            'costs':{'scenarios':[{'boards':5,'scenario':'user_confirmed','cost':cost}]}}
+    text=design_summary(report)
+    assert '$0.00' not in text and 'incomplete' in text and '0 of 2 lines costed' in text
+    assert '0.05 per board' in text and 'not a quotation' in text
+    assert r'TEST-2.54-1\*3P' in text

@@ -80,6 +80,12 @@ class AuditedCatalog:
         return self._call("search", dict(category=category, package=package, text=text, limit=limit),
                           lambda: self.base.search(category, package, text, limit))
 
+    def prefetch_discovery(self, requests: list[tuple]) -> None:
+        # Warms official rows only; every returned candidate is still recorded by discover_for.
+        prefetch = getattr(self.base, "prefetch_discovery", None)
+        if prefetch:
+            prefetch(requests)
+
     def discover_for(self, original: PartRecord, category: str, package, text, limit) -> list[PartRecord]:
         discover = getattr(self.base, "discover_for", None)
         return self._call("discover_for", dict(original=original.key, category=category, package=package, text=text, limit=limit),

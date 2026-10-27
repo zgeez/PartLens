@@ -374,3 +374,35 @@ def test_cli_registry_official_and_zetaris_combination(monkeypatch, tmp_path):
     monkeypatch.delenv("JLC_SECRET_KEY")
     with pytest.raises(SystemExit, match="JLC_SECRET_KEY"):
         catalogs_from_args(args)
+
+
+def test_expired_rows_refresh_in_one_bounded_request(tmp_path):
+    codes = ["C900000001", "C900000002", "C900000003"]
+    calls = []
+    def transport(req, **k):
+        asked = json.loads(req.data)["componentCodes"]; calls.append(asked)
+        return Response({"code": 200, "success": True,
+                         "data": [{**component(), "componentCode": c} for c in asked]})
+    catalog = JLCCatalog(JLCClient(CFG, cache_dir=tmp_path / "cache", ttl=0, transport=transport))
+    catalog.prepare(codes)
+    for code in codes:  # every row is already expired (ttl=0)
+        catalog.rows[code]["retrieved_at"] = "2020-01-01T00:00:00Z"
+    assert catalog.get("jlcpcb:C900000002") is not None
+    assert len(calls) == 2 and sorted(calls[1]) == codes
+
+
+def test_prefetch_discovery_shares_one_request_across_lines(tmp_path):
+    lead_codes = ["C900000002", "C900000003"]
+    calls = []
+    def transport(req, **k):
+        asked = json.loads(req.data)["componentCodes"]; calls.append(asked)
+        return Response({"code": 200, "success": True,
+                         "data": [{**component(), "componentCode": c} for c in asked]})
+    leads = LocalCatalog([record_from_row({**row_from_detail({**component(), "componentCode": c}, observation()),
+                                           "supplier": "lcsc"}) for c in lead_codes])
+    catalog = JLCCatalog(JLCClient(CFG, cache_dir=tmp_path / "cache", transport=transport), leads)
+    original = part()
+    catalog.prefetch_discovery([(original, original.category, original.package, None, 5)] * 2)
+    found = catalog.discover_for(original, original.category, original.package, None, 5)
+    assert len(calls) == 1 and sorted(calls[0]) == lead_codes
+    assert sorted(p.supplier_pn for p in found) == lead_codes
