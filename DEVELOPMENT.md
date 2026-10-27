@@ -94,8 +94,8 @@ smoke command. `partlens ui --zetaris` and `partlens chat --zetaris` use that ca
 fixture. The exact MPN and manufacturer must match. `--fees FILE` selects an explicit fee schedule; unknown
 fees remain unknown. Both options are available for `ui`, `chat` and `live-demo`.
 
-See [the Milestone 2 runbook](docs/hackathon/MILESTONE-2-RUNBOOK.md),
-[status report](docs/hackathon/MILESTONE-2.md) and [sponsor access research](docs/hackathon/SPONSOR-ACCESS.md).
+See the Milestone 2 runbook,
+status report and [sponsor access research](docs/hackathon/SPONSOR-ACCESS.md).
 
 ## Local agent and Milestone 3
 
@@ -143,13 +143,13 @@ The UI command accepts `--quantity-record` with the same source. Select **Live a
 LLM, inspect the Qualifications comparison and its status filter, then **Compare costs: owner / 60** for the
 explicitly hypothetical build. **New session + recall** performs real deterministic memory retrieval and
 current checks; it does not itself call an LLM. `scripts/evaluate_local.py` tests recall under the LLM.
-See [Milestone 3 results](docs/hackathon/MILESTONE-3.md) and the
-[three-minute demo and verification runbook](docs/hackathon/MILESTONE-3-RUNBOOK.md).
+See Milestone 3 results and the
+three-minute demo and verification runbook.
 
 ## Milestone 4 controlled workflow
 
-Use the [current runbook](docs/hackathon/MILESTONE-4-RUNBOOK.md) and
-[acceptance report](docs/hackathon/MILESTONE-4.md). Desktop live review, chat, live-demo and both local
+Use the current runbook and
+acceptance report. Desktop live review, chat, live-demo and both local
 evaluation scripts now supply an explicit `WorkflowRequest`. Direct live-provider `Agent.send()` calls
 without that scope are rejected; the legacy uncontrolled path remains for scripted reference tests only.
 Provider/model failures inside a controlled run produce an audited partial result. No fabricated owner reply
@@ -195,7 +195,7 @@ model evaluation, use `scripts/evaluate_milestone4.py`; source selection and fau
 ## Commit log and timestamps
 
 Commit timestamps are the record of when work was done. Notable steps are also listed in
-[docs/hackathon/TIMELINE.md](docs/hackathon/TIMELINE.md).
+the Timeline record.
 
 ## Official component source
 
@@ -216,14 +216,14 @@ the legacy table is not automatically added. Use `--catalog` only for an explici
 `scripts/preview_milestone5.py` instead rechecks actual live-agent selections in the existing desktop,
 without calling a model. `partlens replay RUN --recorded-sources` uses lossless source observations offline;
 it cannot establish a new supplier or memory success. See the
-[Milestone 5 report](docs/hackathon/MILESTONE-5.md) and
-[three-minute runbook](docs/hackathon/MILESTONE-5-RUNBOOK.md). Keep the owner's SDK archive and all real
+Milestone 5 report and
+three-minute runbook. Keep the owner's SDK archive and all real
 supplier/cache/run artifacts ignored and internal pending data-usage review.
 
 ## New Design from an idea
 
 The owner subsequently authorized a separate workflow; Existing BOM behavior remains supported. Read
-[DESIGN-GENERATION.md](docs/hackathon/DESIGN-GENERATION.md) for schemas, actual results and limitations.
+the Design Generation record for schemas, actual results and limitations.
 The local-only entry point requires the Node H-MEM setup above. With configured read-only services:
 
 ```powershell
@@ -241,8 +241,8 @@ Exports and all real data stay ignored in `.partlens/`. Model evaluation and col
 different operations; the documented recheck script does not invoke a second model.
 
 New Design is available from the desktop's top mode bar. The architecture-correction report records the
-full temperature-product walkthrough; current badge interaction results are in
-`docs/hackathon/FINAL-DESIGN-WORKFLOW.md`. No schematic,
+full temperature-product walkthrough; current badge interaction results are kept in the local doc archive.
+No schematic,
 pin-validated netlist, ERC or manufacturing-ready export is implemented.
 
 Use the editable checkout for service workflows: the Python-only wheel does not bundle the Node H-MEM
@@ -274,7 +274,7 @@ new audited source-only tree under `.partlens/partlens-source/`, then independen
 checkout, locked Node bridge dependencies and the pinned public H-MEM reference. Its new venv runs the
 real bridge smoke, both original deterministic examples and the entire suite without owner credentials.
 It does not initialize Git, add a remote or publish. See
-[ARCHITECTURE-CORRECTION.md](docs/hackathon/ARCHITECTURE-CORRECTION.md) for actual results and limitations.
+the Architecture Correction record for actual results and limitations.
 
 `scripts/revise_design.py` is an operator-only path for relaying a genuine verbatim owner answer to a
 recorded design, invalidating prior results and rechecking current evidence. Do not use it to fabricate

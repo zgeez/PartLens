@@ -1,0 +1,80 @@
+{
+  "schema_version": "0.1-community",
+  "project": {
+    "name": "PartLens",
+    "summary": "A Windows desktop app that designs small electronics boards from an idea and reviews bills of materials: a local AI model investigates while deterministic engineering checks decide compatibility, and missing evidence stays unverified.",
+    "licence": "Apache-2.0"
+  },
+  "track": "[OWNER: track name]",
+  "team": {
+    "name": "Cirquill",
+    "builders": [
+      {
+        "name": "[OWNER: builder name]",
+        "role": "builder"
+      }
+    ]
+  },
+  "repository": "https://github.com/zgeez/PartLens",
+  "submission": {
+    "demo_video": "[OWNER: demo video URL]",
+    "slide_deck": "[OWNER: slide deck URL]",
+    "download": "[OWNER: GitHub release or Google Drive link to PartLens.exe]"
+  },
+  "sponsors": {
+    "zetaris": {
+      "status": "working",
+      "how": "Read-only Lightning SQL through the Zetaris REST (UI proxy) API over supplier observations. In 'Official JLCPCB through Zetaris' mode, official JLCPCB observations are queried as a relation and related to BOM lines and requirements, with no silent fallback. Every query is journalled with SQL, client request ID, timing, row count and a result digest.",
+      "interface": "rest",
+      "deployment": "local-docker",
+      "where": [
+        "src/partlens/sources/zetaris.py",
+        "src/partlens/sources/jlcpcb.py",
+        "src/partlens/preflight.py"
+      ],
+      "evidence": [
+        "docs/hackathon/SPONSOR-ACCESS.md: 88 successful SELECTs in the official-source trial; independent validation on 2026-10-22",
+        "Desktop 'Check local services' runs a real query restricted to the demo BOM's supplier codes and records whether matching rows came back"
+      ]
+    },
+    "meterless": {
+      "status": "working",
+      "how": "Meterless H-MEM is PartLens's decision memory. Each verified, rejected or unverified substitution decision is written with its run record, decision ID and checks. Recall brings decisions back in a new session as context, and the workflow controller forces the deterministic checks to run again on current data before reuse.",
+      "engines": ["H-MEM"],
+      "provider": "none (inference is local Ollama)",
+      "where": [
+        "src/partlens/memory/hmem.py",
+        "integrations/hmem-bridge/bridge.ts"
+      ],
+      "evidence": [
+        "Bundled H-MEM reference engine (commit 1742dec56a66e58eef9dda2d2b865823758ca8cd) test suite: 10/10 passing",
+        "Cold-session recall rechecked 5 decisions: 3 unchanged, 2 still unverified",
+        "Packaged executable acceptance performs a real H-MEM write and cold recall"
+      ]
+    },
+    "cursor": {
+      "status": "not used",
+      "how": "Cursor was not used. Development used Codex, Claude Code and Antigravity; none are in the product's runtime path."
+    },
+    "nvidia": {
+      "status": "working",
+      "how": "Local inference hardware: Ollama runs qwen3.5:9b (Q4_K_M, 6.1 GB) fully in the memory of an NVIDIA GeForce RTX 5070 Ti (16 GB). No NVIDIA cloud API or Nemotron model is used.",
+      "route": "local-gpu",
+      "where": [
+        "src/partlens/local_provider.py"
+      ]
+    }
+  },
+  "pre_existing": [
+    "Ollama runtime and Qwen qwen3.5:9b model weights (downloaded locally, not distributed)",
+    "Meterless H-MEM reference engine, commit 1742dec5 (Apache-2.0, vendored by setup)",
+    "Easyduino RP2040 example BOM (CERN-OHL-P-2.0)",
+    "pywebview, WebView2, Node.js and Python libraries (see THIRD_PARTY.md)"
+  ],
+  "run": {
+    "setup": "README.md#quickstart-judges",
+    "sample_mode": true,
+    "secrets": ["JLC_APP_ID", "JLC_ACCESS_KEY", "JLC_SECRET_KEY", "ZETARIS_API_KEY"]
+  },
+  "evidence_logs": "Run records are written locally under %LOCALAPPDATA%\\PartLens\\state and are not distributed"
+}

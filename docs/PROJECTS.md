@@ -76,4 +76,4 @@ and is not automatically moved between projects.
 
 The foundation is tested with synthetic data and the real local memory engine. It does not broaden
 supplier permissions, engineering coverage or paid-provider access. See the
-[production assessment](PRODUCT-READINESS.md) and [implementation/verification record](hackathon/PRODUCTION-FOUNDATION.md).
+production assessment and implementation/verification record.

@@ -48,7 +48,7 @@ The owner-provided JLCPCB Business SDK archive contains Java artifact
 were inspected as a contract reference; no implementation was executed, decompiled, copied or incorporated.
 No source/Javadocs were bundled. The original archive and ignored local JAR retain their third-party terms;
 they are not Apache-2.0 project artifacts and are not redistributed. See the
-[Milestone 5 investigation](docs/hackathon/MILESTONE-5.md).
+Milestone 5 investigation.
 
 Rules: third-party code and data keep their licences and notices; anything vendored at setup time is recorded
 here with its source URL and revision.
@@ -67,7 +67,7 @@ resizing and Windows icon encoding; it is not a runtime dependency or bundled in
 The original `src/partlens/design/patterns.py` definitions use paraphrased facts and supporting-component
 roles from Espressif, TI, Lumissil, STMicroelectronics, Microchip and Samsung manufacturer documents. Exact
 links, relevant locations and review limits are listed in
-[DESIGN-GENERATION.md](docs/hackathon/DESIGN-GENERATION.md). The Knowles microphone remains an unreviewed
+the Design Generation record. The Knowles microphone remains an unreviewed
 lead. Manufacturer PDFs, schematics, trademarks and supplier responses are not project-licensed assets
 or bundled documents. No vendor circuit implementation, SDK code or CAD library was copied. Original
 pattern/check code and the from-scratch deterministic concept example are Apache-2.0; cited source
@@ -78,7 +78,7 @@ installed or incorporated for this feature.
 The correction milestone adds original reference-role/check definitions informed by the official TI
 TPS63802/TMP117 datasheets, Espressif module/SoC pin and reset documentation, and Samsung 4.7/1 µF product
 pages. Exact source links and limits are in
-[ARCHITECTURE-CORRECTION.md](docs/hackathon/ARCHITECTURE-CORRECTION.md). No manufacturer PDF, circuit
+the Architecture Correction record. No manufacturer PDF, circuit
 implementation or supplier response is bundled. Uniroyal code leads are not independently qualified
 resistor reference data. No new runtime dependency was introduced; independent checkout setup retrieves
 the existing declared Python dependencies, locked bridge dependencies and pinned H-MEM engine, retaining

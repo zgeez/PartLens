@@ -51,7 +51,7 @@ in `20261022T055728Z-2156b4`.
 Live Claude also used the working Zetaris catalogue (`20261022T060443Z-998b88`, 19 successful SQL operations)
 and a separate live session recalled and rechecked its Meterless decision (`20261022T060513Z-b2c4b2`, 18 SQL
 operations). These are real agent/query operations, not mocked or scripted planner results. See the
-[milestone report](MILESTONE-2.md) for model, tool-use and memory evidence.
+milestone report for model, tool-use and memory evidence.
 
 Earlier missing-access, 404, unsupported SQL, response-parser, restricted-path and partial JSON-import failures
 remain preserved. In particular, importing JSON Lines returned only one row; count validation rejected those
@@ -60,7 +60,7 @@ were retained rather than silently deleted. The copied files remain in the local
 `.partlens/zetaris/` artifacts; they are internal pending licensing review and are not Git artifacts.
 
 The reproducible setup uses the [official Lightning file-table syntax](https://github.com/zetaris/getting-started/blob/main/docs/guides/zetaris-lightning-sql-commands.md).
-See the [runbook](MILESTONE-2-RUNBOOK.md) for commands. No cloud resources were created or other credentials inspected.
+See the runbook for commands. No cloud resources were created or other credentials inspected.
 
 ## Mouser
 
@@ -111,4 +111,4 @@ Anthropic credits were exhausted in `20261022T070859Z-365063` after eight actual
 92 successful Zetaris queries. That run did not reach a final answer. The owner subsequently selected local
 inference and Sonnet for future paid use. No new paid calls were made for this provider change. Official
 Ollama was installed in ignored local state with its published archive digest verified; cloud inference is
-disabled. Local model evaluations and their failures are in [Milestone 3](MILESTONE-3.md).
+disabled. Local model evaluations and their failures are in Milestone 3.
