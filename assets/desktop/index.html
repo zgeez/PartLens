@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'unsafe-eval'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<title>PartLens</title><style>/* APP_CSS */</style>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="#chat" aria-label="PartLens home"><img src="{{LOGO}}" alt="PartLens: an electronic part inside a magnifying glass"><span>PartLens<small>ENGINEERING WORKSPACE</small></span></a>
+    <button class="button new-chat" id="new-chat"><span data-icon="plus"></span>New conversation<span class="shortcut">Ctrl N</span></button>
+    <nav class="main-nav" aria-label="Workspace">
+      <button class="nav-item active" data-page="chat"><span data-icon="chat"></span>Conversations</button>
+      <button class="nav-item" data-page="bom"><span data-icon="parts"></span>BOM workspace</button>
+      <button class="nav-item" data-page="settings"><span data-icon="settings"></span>Settings</button>
+    </nav>
+    <div class="history-heading">Recent conversations</div><div id="history" class="history"></div>
+    <div class="sidebar-footer"><div class="local-card"><span class="local-indicator"></span><div><strong>Local intelligence</strong><small id="sidebar-model">Loading configuration…</small></div><span class="local-badge">LOCAL</span></div>
+      <button id="services-button" class="service-link"><span data-icon="activity"></span><span id="service-status">Check local services</span><span data-icon="arrow"></span></button>
+      <p>Evidence before confidence.</p>
+    </div>
+  </aside>
+  <main class="workspace">
+    <header class="topbar"><div class="page-title"><div class="eyebrow" id="eyebrow">WORKSPACE / CONVERSATION</div><h1 id="page-title">New conversation</h1></div><div class="header-actions"><span class="supplier-label" id="supplier-label"></span><button class="button quiet" id="open-report"><span data-icon="folder"></span>Reports</button><button class="button" id="evidence-button"><span data-icon="lens"></span>Evidence</button></div></header>
+    <section class="page chat-page" id="chat-page">
+      <div class="transcript" id="transcript" role="log" aria-label="Conversation"><div id="messages"></div></div>
+      <div class="composer-area"><div id="chat-status" class="operation-status" aria-live="polite"></div>
+        <div class="question-bar hidden" id="question-bar"><span data-icon="question"></span><span>Your answer is needed</span><button class="text-button" id="skip-question">Leave unanswered</button></div>
+        <div class="composer"><textarea id="message-input" rows="2" maxlength="5000" placeholder="Describe an idea, ask about your report, or attach a BOM…" aria-label="Your message"></textarea>
+          <div class="composer-actions"><div class="composer-tools"><button class="icon-button" id="attach-bom" title="Attach a CSV BOM" aria-label="Attach a CSV BOM"><span data-icon="attach"></span></button><select id="chat-mode" aria-label="Conversation mode"><option value="design">New design</option><option value="bom">BOM review</option></select><button class="assumptions-trigger" id="assumptions-trigger"><span data-icon="sliders"></span>Assumptions</button><span class="attachment hidden" id="attachment"></span></div><button class="send-button" id="send" aria-label="Send message" title="Send message"><span data-icon="send"></span></button><button class="button stop-button hidden" id="stop">Stop<span class="stop-square"></span></button></div>
+          <div class="assumptions-panel hidden" id="assumptions-panel"><label class="switch-label"><input type="checkbox" id="proposals" checked><span class="switch"></span><span><strong>Propose missing choices</strong><small>Assumptions stay provisional. Only your explicit answers can confirm requirements.</small></span></label></div>
+        </div><div class="composer-caption"><span>Independent checks decide compatibility. Missing evidence stays unverified.</span><span>Enter to send · Shift+Enter for a new line</span></div>
+      </div>
+    </section>
+    <section class="page bom-page hidden" id="bom-page"><div class="page-scroll"><div class="section-intro"><div><h2>Your parts. Their evidence.</h2><p>Review identities, replacement decisions and cost coverage in one workspace.</p></div><span class="scope-label">PRELIMINARY REVIEW</span></div>
+      <div class="toolbar"><div><button class="button" id="bom-demo"><span data-icon="parts"></span>Load demo</button><button class="button" id="bom-import"><span data-icon="upload"></span>Import CSV</button><button class="button primary" id="bom-review"><span data-icon="check"></span>Run checks</button><button class="button" id="bom-agent"><span data-icon="spark"></span>Local agent review</button></div><div><button class="button quiet" id="bom-new">New session</button><button class="button quiet" id="bom-recall"><span data-icon="memory"></span>Recall & recheck</button><button class="button quiet" id="bom-compare" title="Confirmed build quantity versus a hypothetical 60-board scenario">Compare costs</button></div></div>
+      <div class="project-bar"><label>Project<select id="project-select" aria-label="Saved project"></select></label><label>Revision<select id="revision-select" aria-label="Saved BOM revision"></select></label><button class="button" id="project-create">New project</button><button class="button" id="bom-export">Export reviewed proposal</button></div>
+      <div id="project-notice" class="info-box" role="status"></div>
+      <div id="bom-status" class="operation-status" aria-live="polite"></div><div class="bom-summary" id="bom-summary"></div>
+      <div class="content-card"><nav class="tabs" id="bom-tabs" aria-label="BOM evidence sections"></nav><div class="panel-body" id="bom-content"></div></div>
+    </div></section>
+    <section class="page settings-page hidden" id="settings-page"><div class="page-scroll"><div class="section-intro"><div><h2>Make PartLens yours.</h2><p>Local models, authorized suppliers and private configuration—all in one place.</p></div><span class="scope-label">LOCAL SETTINGS</span></div>
+      <div class="settings-layout"><nav class="settings-nav" id="settings-nav" aria-label="Settings categories"></nav><div class="settings-main"><div id="settings-form"></div><div class="settings-savebar"><span id="settings-note">Credentials stay encrypted on this computer.</span><div><button class="button quiet" id="settings-import"><span data-icon="upload"></span>Import .env.local</button><button class="button" id="settings-reset">Cancel changes</button><button class="button primary" id="settings-save">Save changes</button></div></div></div></div>
+    </div></section>
+  </main>
+  <aside class="inspector hidden" id="inspector"><div class="inspector-header"><div><div class="eyebrow">RECORDED RESULTS</div><h2>Evidence</h2></div><button class="icon-button" id="close-evidence" aria-label="Close Evidence"><span data-icon="close"></span></button></div><div class="recorded-note" id="evidence-note">Recheck for current inventory. Application suitability is separate.</div><div class="inspector-actions"><button class="button" id="recheck"><span data-icon="refresh"></span>Recheck</button><button class="button" id="edit-requirement"><span data-icon="edit"></span>Update requirement</button></div><select id="evidence-section" aria-label="Evidence section"></select><pre class="evidence-text" id="evidence-content"></pre></aside>
+</div>
+<div id="toast" class="toast hidden" role="status"></div>
+<dialog id="modal"><div class="modal-heading"><div><div class="eyebrow" id="modal-eyebrow">PARTLENS</div><h2 id="modal-title"></h2></div><button class="icon-button" id="modal-close" aria-label="Close dialog"><span data-icon="close"></span></button></div><div id="modal-content"></div><div id="modal-actions" class="modal-actions"></div></dialog>
+<template id="welcome-template"><div class="welcome"><div class="welcome-art"><img src="{{HERO}}" alt="A lens illuminating an electronic component"></div><div class="welcome-kicker">AN IDEA. A PART. A CLEARER DECISION.</div><h2>What are we building?</h2><p>Explore a design or review your BOM.<br>Keep the evidence behind every decision.</p><div class="starter-grid"><button class="starter" data-starter="idea"><span data-icon="spark"></span><strong>Explore an idea</strong><small>Turn a concept into a preliminary design</small><span class="starter-arrow" data-icon="arrow"></span></button><button class="starter" data-starter="import"><span data-icon="upload"></span><strong>Bring your BOM</strong><small>Inspect parts and research replacements</small><span class="starter-arrow" data-icon="arrow"></span></button><button class="starter" data-starter="demo"><span data-icon="parts"></span><strong>Try the demo</strong><small>Start with the configured example BOM</small><span class="starter-arrow" data-icon="arrow"></span></button></div></div></template>
+<script>/* APP_JS */</script>
+</body></html>
