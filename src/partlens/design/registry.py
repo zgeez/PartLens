@@ -1,18 +1,18 @@
 """New operations use the shared registry and argument validation, not model-authored verdicts."""
 
-from .requirements import FIELDS
+from .requirements import ALL_FIELDS
 
 
 def tools(Tool, obj):
     from .patterns import all_patterns
-    patterns=all_patterns()
+    patterns=all_patterns(('breadboard_power',))
     selection_schema=obj({block:{'type':'string','enum':[p.id for p in patterns.values() if p.block==block]}
         for block in {p.block for p in patterns.values()}},[])
     empty=lambda:obj({},[])
     return [
         Tool('propose_design_requirements','Propose a bounded batch of explicit-unit requirements as a native array of objects. All values remain provisional; never overwrite owner-confirmed choices or invent user quotations.',
              obj({'requirements':{'type':'array','minItems':1,'maxItems':24,'items':obj({
-                 'parameter':{'type':'string','enum':list(FIELDS)},'value':{'type':'string'},
+                 'parameter':{'type':'string','enum':list(ALL_FIELDS)},'value':{'type':'string'},
                  'rationale':{'type':'string'}},['parameter','value'])}},['requirements']),
              lambda s,requirements:s.propose_design_requirements(requirements)),
         Tool('select_design_patterns','Select the architecture using exact enumerated pattern IDs. Supply selections as an object, including all required blocks. Independent checks expose unsupported requirements; never change a target merely to clear a failure.',
@@ -27,7 +27,7 @@ def tools(Tool, obj):
              empty(),lambda s:s.design_requirements()),
         Tool("record_design_requirement","Record one value with explicit units. Exact user_quote is checked against actual "
              "user messages; invented/default values remain inferred. Revision invalidates previous circuit/BOM/checks.",
-             obj({"parameter":{"type":"string","enum":list(FIELDS)},"value":{"type":"string"},
+             obj({"parameter":{"type":"string","enum":list(ALL_FIELDS)},"value":{"type":"string"},
                   "user_quote":{"type":"string"},"intent":{"type":"string","enum":["proposal","optional"]},
                   "action":{"type":"string","enum":["append","replace"]},"rationale":{"type":"string"}},
                  ["parameter","value"]),lambda s,**a:s.record_design_requirement(**a)),

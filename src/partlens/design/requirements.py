@@ -36,10 +36,20 @@ FIELDS = {
     "board_quantity": ("manufacturing", "count"), "parts_budget": ("manufacturing", "USD"),
     "brightness": ("functional", "text"), "charging_use": ("power", ("off_while_charging", "simultaneous")),
 }
+BREADBOARD_FIELDS = {
+    "input_interface": ("interfaces", ("usb_c", "barrel_jack", "dual_input")),
+    "input_voltage_min": ("power", "V"), "input_voltage_max": ("power", "V"),
+    "secondary_rail_voltage": ("power", "V"), "rail_current_max": ("power", "mA"),
+    "rail_selection": ("functional", ("fixed_dual_rail", "jumper_selectable", "switch_controlled")),
+}
+ALL_FIELDS = {**FIELDS, **BREADBOARD_FIELDS}
 DEPENDENCIES = {
     "led_average_current": ("led_type", "led_rows", "led_columns"),
     "runtime": ("battery_capacity", "led_average_current"),
     "nfc_mode": (), "microphone_use": (), "parts_budget": ("board_quantity",),
+    "rail_current_max": ("input_voltage_max", "logic_voltage"),
+    "secondary_rail_voltage": ("input_voltage_min", "input_voltage_max"),
+    "input_voltage_max": ("input_interface",), "input_voltage_min": ("input_interface",),
 }
 QUESTIONS = {
     "led_count": "How many physical LED positions in total? Confirm separately from matrix dimensions; 32 and 128 are different designs.",
@@ -60,16 +70,23 @@ QUESTIONS = {
     "board_quantity": "How many boards will be assembled?", "parts_budget": "What parts budget and currency?",
     "brightness": "What brightness or viewing conditions?",
     "charging_use": "Must the badge operate while charging?",
+    "input_interface": "Which DC power input connector would you like (**USB-C**, **Barrel Jack**, or **Dual Input**)?",
+    "input_voltage_min": "What is the minimum DC input supply voltage (V)?",
+    "input_voltage_max": "What is the maximum DC input supply voltage (V)?",
+    "secondary_rail_voltage": "What voltage is required on the secondary breadboard rail (V)?",
+    "rail_current_max": "What maximum continuous load current is required from the regulated rail (mA)?",
+    "rail_selection": "How should the breadboard output rails be configured (**Jumper-selectable**, **Fixed dual-rail**, or **Switch-controlled**)?",
 }
 FEATURES = {"ble": ("bluetooth", "ble"), "led_matrix": ("led matrix", "matrix"),
             "nfc": ("nfc",), "microphone": ("microphone",), "imu": ("imu",),
-            "rechargeable": ("rechargeable", "li-ion", "lipo"), "temperature": ("temperature", "thermometer")}
+            "rechargeable": ("rechargeable", "li-ion", "lipo"), "temperature": ("temperature", "thermometer"),
+            "breadboard_power": ("breadboard", "power supply", "dual rail")}
 
 
 def parse(parameter: str, text: str) -> tuple[Any, str | None]:
-    if parameter not in FIELDS:
+    if parameter not in ALL_FIELDS:
         raise ValueError("unsupported requirement parameter")
-    kind = FIELDS[parameter][1]
+    kind = ALL_FIELDS[parameter][1]
     if isinstance(kind, tuple):
         if text not in kind:
             raise ValueError(f"{parameter} must be one of {kind}")
@@ -143,7 +160,10 @@ class Requirements:
                 pattern = r"(?<![\w.])" + re.escape(str(value)) + (r"\s*" + re.escape(unit) if unit else r"(?![\w.])")
                 confirmed = bool(re.search(pattern, quote))
             else:
-                confirmed = str(value).casefold() in quote.casefold()
+                v_cf = str(value).casefold()
+                q_cf = quote.casefold()
+                confirmed = (v_cf in q_cf or v_cf.replace("_", "-") in q_cf.replace(" ", "-")
+                             or (parameter in BREADBOARD_FIELDS and v_cf.split("_")[0] in q_cf))
         state = State.CONFIRMED if confirmed else State.OPTIONAL if optional else State.INFERRED
         old = self.current.get(parameter)
         if old and (old.binding or old.state is State.CONFLICTING) and old.value != value and not replace:
@@ -171,6 +191,9 @@ class Requirements:
             needed.add("microphone_use")
         if "rechargeable" in self.features:
             needed |= {"battery_capacity", "battery_min", "battery_max", "runtime", "charging_use"}
+        if "breadboard_power" in self.features:
+            needed |= {"logic_voltage", "secondary_rail_voltage", "input_voltage_min", "input_voltage_max",
+                       "rail_current_max", "input_interface", "rail_selection"}
         result=[]
         for key in sorted(needed):
             item=self.current.get(key)
@@ -184,6 +207,6 @@ class Requirements:
         return {"schema": SCHEMA, "design_id": self.design_id, "revision": self.revision,
                 "description": self.description, "description_source": self.description_source,
                 "features": self.features,
-                "requirements": {k: {**to_jsonable(v), "binding": v.binding, "domain": FIELDS[k][0]}
+                "requirements": {k: {**to_jsonable(v), "binding": v.binding, "domain": ALL_FIELDS[k][0]}
                                  for k,v in self.current.items()},
                 "history": to_jsonable(self.entries)}

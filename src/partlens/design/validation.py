@@ -18,6 +18,59 @@ def validate(spec,circuit):
         circuit.checks.append(CheckResult(name,spec.design_id,status,message,evidence=tuple(ev)))
     voltage,lo,hi=spec.get('logic_voltage'),spec.get('battery_min'),spec.get('battery_max')
     power=circuit.selections.get('power')
+    if 'breadboard_power' in spec.features:
+        vin_lo,vin_hi=spec.get('input_voltage_min'),spec.get('input_voltage_max')
+        load_ma=spec.get('rail_current_max')
+        ind_ma=Decimal('0.5') if 'indicator' in circuit.selections else Decimal('0')
+        req_a=(load_ma+ind_ma)/Decimal('1000') if load_ma is not None else None
+        if power in {'power.tps63031','power.tps63802','power.xc6206_ldo'}:
+            pattern=get_pattern(power)
+            if power=='power.xc6206_ldo':
+                if vin_lo is not None and vin_hi is not None:
+                    add('power.input_range',P if Decimal('1.8')<=vin_lo<vin_hi<=Decimal('6.0') else F,
+                        'Torex XC6206 datasheet specifies 1.8..6.0 V recommended operating input (LCSC C347376 lists 8 V; manufacturer limit governs)',
+                        (pattern.evidence('recommended_operating_input','1.8..6.0 V'),calc('input_envelope',f'{vin_lo}..{vin_hi}')))
+                if voltage is not None:
+                    add('power.output',P if voltage==Decimal('3.3') else F,
+                        'Fixed 3.3 V XC6206P332MR nominal output; dropout and load tolerance require review',
+                        (pattern.evidence('nominal_reference','3.3 V'),calc('proposed_logic_V',voltage)))
+                if req_a is not None:
+                    add('power.design_budget',P if req_a<=Decimal('0.25') else F,
+                        f'Proposed 3.3 V rail load {req_a} A versus XC6206P332MR 0.25 A current limit',
+                        (pattern.evidence('output_current_limit','0.25 A'),calc('total_3v3_rail_A',req_a)))
+                    if vin_hi is not None and voltage is not None:
+                        pd=(vin_hi-voltage)*req_a
+                        add('power.thermal_dissipation',F if pd>Decimal('0.25') else U,
+                            f'Worst-case LDO dissipation ({vin_hi} V - {voltage} V) * {req_a} A = {pd} W versus SOT-23 0.25 W package limit',
+                            (pattern.evidence('sot23_power_dissipation','0.25 W'),calc('ldo_dissipation_W',pd)))
+                add('power.peak_thermal',U,'Inrush, short-circuit foldback, ambient derating and PCB copper thermal resistance remain unverified')
+            else:
+                alt=power=='power.tps63802'
+                minimum=Decimal('1.3') if alt else Decimal('1.8')
+                if vin_lo is not None and vin_hi is not None:
+                    add('power.input_range',P if minimum<=vin_lo<vin_hi<=Decimal('5.5') and (not alt or vin_lo>Decimal('1.8')) else F,
+                        'DC input envelope versus converter recommended input/startup conditions',
+                        (pattern.evidence('input/startup','1.3..5.5 V; startup >1.8 V' if alt else '1.8..5.5 V'),calc('input_envelope',f'{vin_lo}..{vin_hi}')))
+                if voltage is not None:
+                    add('power.output',P if voltage==Decimal('3.3') else F,
+                        'Reviewed 3.3 V nominal reference; tolerance/transient rail envelope still requires review',
+                        (pattern.evidence('nominal_reference','3.3 V'),calc('proposed_logic_V',voltage)))
+                if req_a is not None:
+                    valid=vin_lo is not None and voltage==Decimal('3.3') and (vin_lo>=Decimal('2.3') if alt else vin_lo>Decimal('2.4'))
+                    limit=Decimal('2') if alt else (Decimal('0.8') if vin_lo is not None and vin_lo>=Decimal('3.3') else Decimal('0.5'))
+                    add('power.design_budget',P if valid and req_a<=limit else F if valid else U,
+                        f'Proposed 3.3 V rail load {req_a} A versus conditional {limit} A converter reference; transients remain unqualified',
+                        (pattern.evidence('conditional_output_A',str(limit)),calc('total_3v3_rail_A',req_a)))
+                add('power.thermal_dissipation',U,'Switched-mode converter efficiency, inductor losses and PCB thermal impedance require board-level verification')
+                add('power.peak_thermal',U,'Peak loads, current limit, inductor saturation/ripple, efficiency, capacitor bias and junction temperature not fully evidenced')
+                if alt:
+                    nominal=Decimal('.5')*(1+Decimal(511)/91)
+                    circuit.estimates['feedback_nominal_V']=str(nominal)
+                    add('power.feedback',U,'511k/91k manufacturer reference gives nominal '+str(nominal)+' V; exact resistor tolerances, feedback accuracy and resulting rail margins require qualification',
+                        (pattern.evidence('feedback_example','511k/91k, 0.5 V FB'),calc('nominal_V',nominal)))
+        for row in circuit.roles:
+            add('footprint.'+row.line_id,U,'Exact land pattern/pad mapping and implementation not validated'+('' if row.role.package else '; package requirement also unknown'))
+        return
     if power in {'power.tps63031','power.tps63802'}:
         alt=power=='power.tps63802';pattern=get_pattern(power)
         minimum=Decimal('1.3') if alt else Decimal('1.8')

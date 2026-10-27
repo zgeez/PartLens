@@ -48,15 +48,16 @@ class Circuit:
                        "roles": self.roles})
 
     def view(self) -> dict:
+        feats=("breadboard_power",) if ({"input_power","rail_output","indicator"}&set(self.selections) or "power.xc6206_ldo" in self.selections.values()) else ()
         return {"schema": SCHEMA, **to_jsonable(self), "fingerprint": self.fingerprint,
-                "block_alternatives":{block:[p.id for p in all_patterns().values() if p.block==block]
+                "block_alternatives":{block:[p.id for p in all_patterns(feats).values() if p.block==block]
                                       for block in self.selections},
                 "status": "preliminary", "manufacturing_ready": False,
                 "connectivity": "named port/net intent only; pins, nets and ERC not validated"}
 
 
 def propose(spec: Requirements, selections: dict[str, str], justifications: dict[str, str] | None = None) -> Circuit:
-    PATTERNS=all_patterns()
+    PATTERNS=all_patterns(spec.features)
     needed=required_blocks(spec.features)
     if set(selections)-needed:
         raise ValueError("pattern selected for a block not required by the current product features")
@@ -99,7 +100,7 @@ def propose(spec: Requirements, selections: dict[str, str], justifications: dict
 
 
 def check_circuit(spec: Requirements, circuit: Circuit) -> None:
-    PATTERNS=all_patterns()
+    PATTERNS=all_patterns(spec.features)
     circuit.checks.clear()
     def add(name,status,message,evidence=()):
         circuit.checks.append(CheckResult(name,spec.design_id,status,message,evidence=tuple(evidence)))
@@ -125,6 +126,105 @@ def check_circuit(spec: Requirements, circuit: Circuit) -> None:
             add("pattern."+block,P,"manufacturer reference reviewed; circuit implementation still unverified",
                 (pattern.evidence("reference",pattern.location),))
     voltage=spec.get("logic_voltage")
+    if "breadboard_power" in spec.features:
+        vin_lo,vin_hi=spec.get("input_voltage_min"),spec.get("input_voltage_max")
+        sec_v=spec.get("secondary_rail_voltage")
+        load_ma=spec.get("rail_current_max")
+        iface=spec.get("input_interface")
+        circuit.rails=[{"name":"3V3","voltage":to_jsonable(voltage),"source":"proposed logic_voltage","qualified":False},
+                       {"name":"5V_RAIL","voltage":to_jsonable(sec_v),"source":"proposed secondary_rail_voltage","qualified":False},
+                       {"name":"VIN","minimum":to_jsonable(vin_lo),"maximum":to_jsonable(vin_hi),"qualified":False}]
+        for block,pid in circuit.selections.items():
+            pattern=PATTERNS[pid]
+            if pattern.supply and voltage is not None and pattern.reviewed:
+                lower,upper=map(Decimal,pattern.supply)
+                add("voltage."+block,P if lower<=voltage<=upper else F,
+                    f"proposed {voltage} V rail versus recommended {lower}..{upper} V; conditional feasibility only",
+                    (pattern.evidence("recommended_supply",f"{lower}..{upper} V"),calc("logic_voltage",voltage)))
+            elif block not in {"power","charging","protection","debug","input_power","rail_output"}:
+                add("voltage."+block,U,"rail voltage or reviewed recommended operating range unavailable")
+        if vin_lo is not None and vin_hi is not None:
+            add("input.voltage_envelope",P if vin_lo<vin_hi else F,
+                f"proposed DC input envelope {vin_lo}..{vin_hi} V",(calc("input_voltage_range",f"{vin_lo}..{vin_hi}"),))
+            if circuit.selections.get("input_power")=="input_power.usb_c_5v":
+                in_pat=PATTERNS["input_power.usb_c_5v"]
+                ok_iface=(iface in {None,"usb_c"} and Decimal("4.5")<=vin_lo<vin_hi<=Decimal("5.5"))
+                add("input.connector_compatibility",P if ok_iface else F,
+                    f"USB-C 5 V sink input pattern (4.5..5.5 V) versus proposed interface={iface or 'unspecified'}, range {vin_lo}..{vin_hi} V",
+                    (in_pat.evidence("usb_c_vbus","4.5..5.5 V nominal 5 V sink"),calc("input_envelope",f"{iface}:{vin_lo}..{vin_hi} V")))
+        else:
+            add("input.voltage_envelope",U,"DC input voltage envelope unresolved")
+        power_id=circuit.selections.get("power")
+        if power_id in PATTERNS and vin_lo is not None and vin_hi is not None:
+            p_pat=PATTERNS[power_id]
+            max_vin=Decimal("6.0") if power_id=="power.xc6206_ldo" else Decimal("5.5")
+            min_vin=Decimal("1.3") if power_id=="power.tps63802" else Decimal("1.8")
+            add("power.input_range",P if min_vin<=vin_lo<vin_hi<=max_vin and (power_id!="power.tps63802" or vin_lo>Decimal("1.8")) else F,
+                f"DC input {vin_lo}..{vin_hi} V versus {power_id} recommended operating input {min_vin}..{max_vin} V",
+                (p_pat.evidence("input_range",f"{min_vin}..{max_vin} V"),calc("input_voltage_range",f"{vin_lo}..{vin_hi}")))
+            if voltage is not None:
+                add("power.output",P if voltage==Decimal("3.3") else F,
+                    f"selected {power_id} reference provides nominal 3.3 V; proposed primary rail is {voltage} V",
+                    (p_pat.evidence("output_voltage","3.3 V"),calc("logic_voltage",voltage)))
+        else:
+            add("power.input_range",U,"regulator or DC input voltage envelope unresolved")
+        circuit.estimates={"conditional":True,"measured":False}
+        if load_ma is not None:
+            ind_ma=Decimal("0.5") if "indicator" in circuit.selections else Decimal("0")
+            req_a=(load_ma+ind_ma)/Decimal("1000")
+            circuit.estimates["rail_load_A"]=str(load_ma/Decimal("1000"))
+            circuit.estimates["indicator_A"]=str(ind_ma/Decimal("1000"))
+            circuit.estimates["total_3v3_rail_A"]=str(req_a)
+            if power_id=="power.xc6206_ldo":
+                p_pat=PATTERNS["power.xc6206_ldo"]
+                add("power.design_budget",P if req_a<=Decimal("0.25") else F,
+                    f"proposed 3.3 V rail load {req_a} A (including indicator) versus XC6206P332MR 0.25 A maximum output current",
+                    (p_pat.evidence("max_output_current","250 mA"),calc("total_3v3_rail_A",req_a)))
+                if vin_hi is not None and voltage is not None:
+                    pd=(vin_hi-voltage)*req_a
+                    circuit.estimates["ldo_worst_case_dissipation_W"]=str(pd)
+                    add("power.thermal_dissipation",F if pd>Decimal("0.25") else U,
+                        f"worst-case LDO dissipation ({vin_hi} V - {voltage} V) * {req_a} A = {pd} W versus SOT-23 0.25 W package rating",
+                        (p_pat.evidence("sot23_power_dissipation","250 mW"),calc("ldo_dissipation_W",pd)))
+                else:
+                    add("power.thermal_dissipation",U,"input/output voltage required to evaluate linear regulator dissipation")
+            elif power_id in {"power.tps63031","power.tps63802"}:
+                p_pat=PATTERNS[power_id]
+                limit=Decimal("2.0") if power_id=="power.tps63802" else (Decimal("0.8") if vin_lo is not None and vin_lo>=Decimal("3.3") else Decimal("0.5"))
+                add("power.design_budget",P if req_a<=limit else F,
+                    f"proposed 3.3 V rail load {req_a} A versus {power_id} conditional {limit} A output capability",
+                    (p_pat.evidence("conditional_output_A",str(limit)),calc("total_3v3_rail_A",req_a)))
+                add("power.thermal_dissipation",U,
+                    "switched-mode converter efficiency, inductor DCR losses and PCB thermal impedance require board-level verification")
+        else:
+            add("power.design_budget",U,"maximum continuous rail current requirement unresolved")
+            add("power.thermal_dissipation",U,"rail load current unresolved")
+        if sec_v is not None:
+            if sec_v==Decimal("5"):
+                add("power.secondary_rail",U,
+                    "secondary 5 V breadboard rail is fed from USB-C VBUS through Schottky protection diode B5819W SL (~0.45..0.60 V forward drop); load regulation and strict 5.0 V tolerance remain unverified")
+            elif sec_v==voltage:
+                add("power.secondary_rail",P,
+                    f"both breadboard rails strapped to regulated {voltage} V output; total combined load must stay within regulator budget",
+                    (calc("secondary_rail_voltage",sec_v),))
+            else:
+                add("power.secondary_rail",F,
+                    f"selected single-regulator architecture provides 3.3 V and pass-through 5 V VBUS only, not an independent {sec_v} V rail",
+                    (calc("secondary_rail_voltage",sec_v),))
+        else:
+            add("power.secondary_rail",U,"secondary breadboard rail voltage target unresolved")
+        add("mechanical.breadboard_fit",U,"physical 2.54 mm header span across MB-102 breadboard power strips (~48.26 mm rail pitch) requires CAD footprint verification")
+        add("connectivity.pins",U,"named nets are circuit intent; no validated pin-level connectivity or ERC")
+        for item in circuit.roles:
+            if not item.role.mpn or not item.role.package:
+                msg = f"{item.line_id} {item.block}.{item.role.name}: exact identity or land pattern unresolved"
+                if msg not in circuit.unresolved:
+                    circuit.unresolved.append(msg)
+            for g in item.role.omissions:
+                msg = f"{item.line_id}: {g}"
+                if msg not in circuit.unresolved:
+                    circuit.unresolved.append(msg)
+        return
     circuit.rails=[{"name":"3V3","voltage":to_jsonable(voltage),"source":"proposed logic_voltage",
                     "qualified":False},
                    {"name":"VBAT","minimum":to_jsonable(spec.get("battery_min")),

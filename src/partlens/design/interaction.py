@@ -15,6 +15,8 @@ def clarification_plan(spec, circuit=None):
     """Rank only relevant, unconfirmed gaps; the agent asks a bounded subset."""
     ranks={'led_type':100,'runtime':98,'led_count':97,'led_rows':96,'led_columns':95,
            'led_average_current':94,'charging_use':93,'nfc_mode':92,'microphone_use':91,
+           'input_interface':96,'input_voltage_max':94,'rail_current_max':92,
+           'secondary_rail_voltage':90,'input_voltage_min':89,'rail_selection':88,
            'battery_capacity':88,'width':86,'height':85,'board_quantity':80,'parts_budget':78,
            'brightness':77,'battery_min':70,'battery_max':69}
     reasons={
@@ -31,6 +33,12 @@ def clarification_plan(spec, circuit=None):
         'nfc_mode':'tag and active reader require different architectures',
         'microphone_use':'audio interface, processing and data requirements',
         'battery_capacity':'available energy; exact cell safety remains independent',
+        'input_interface':'connector selection, USB-C CC termination and reverse-polarity protection',
+        'input_voltage_min':'regulator dropout margin and undervoltage startup limit',
+        'input_voltage_max':'regulator maximum operating input voltage and linear thermal dissipation',
+        'secondary_rail_voltage':'secondary breadboard rail topology and pass-through voltage drop',
+        'rail_current_max':'regulator continuous current capability and thermal ceiling',
+        'rail_selection':'breadboard rail header strapping and switch topology',
         'width':'mechanical envelope and battery accommodation',
         'height':'mechanical envelope and battery accommodation',
         'board_quantity':'stock and purchase-quantity scenarios',
@@ -42,6 +50,8 @@ def clarification_plan(spec, circuit=None):
         key=gap['id'];priority=ranks.get(key,60)
         if 'power.runtime_bound' in failed and key in {'battery_capacity','led_average_current','runtime'}:
             priority+=20
+        if ('power.design_budget' in failed or 'power.thermal_dissipation' in failed) and key in {'rail_current_max','input_voltage_max'}:
+            priority+=20
         rows.append({**gap,'priority':priority,'why_it_matters':reasons.get(key,'operating envelope'),
                      'question':QUESTIONS[key]})
     return sorted(rows,key=lambda r:(-r['priority'],r['id']))
@@ -50,7 +60,16 @@ def clarification_plan(spec, circuit=None):
 def typed_answer(parameter, answer):
     """Accept explicit typed answers only, without extracting numbers from arbitrary prose."""
     value=answer.strip()
+    low=value.casefold().replace('-','_').replace(' ','_')
     if parameter=='led_type' and value.casefold()=='monochrome':value='mono'
+    elif parameter=='input_interface':
+        if low in {'usb_c','usbc','type_c','usb_type_c'}:value='usb_c'
+        elif low in {'barrel_jack','barrel','dc_jack'}:value='barrel_jack'
+        elif low in {'dual_input','dual','both'}:value='dual_input'
+    elif parameter=='rail_selection':
+        if low in {'jumper_selectable','jumper','jumpers'}:value='jumper_selectable'
+        elif low in {'fixed_dual_rail','fixed'}:value='fixed_dual_rail'
+        elif low in {'switch_controlled','switch','switched'}:value='switch_controlled'
     try:parse(parameter,value)
     except ValueError:return None
     return value
@@ -58,6 +77,45 @@ def typed_answer(parameter, answer):
 
 def runtime_options(spec, circuit):
     """Necessary LED-only bounds, never selected cells, sufficient designs or fabricated prices."""
+    if 'breadboard_power' in spec.features:
+        vin_hi,rail,load_ma=(spec.get(k) for k in ('input_voltage_max','logic_voltage','rail_current_max'))
+        if any(v is None for v in (vin_hi,rail,load_ma)) or vin_hi<=rail:
+            return {'status':'unverified','reason':'input voltage envelope, rail voltage and load current required','options':[]}
+        ind_ma=Decimal('0.5') if 'indicator' in circuit.selections else Decimal('0')
+        thermal_max_ma=max(Decimal('1'),(Decimal('0.25')/(vin_hi-rail)*Decimal('1000')-ind_ma).quantize(Decimal('.001'),rounding=ROUND_FLOOR))
+        bound_ma=min(Decimal('249.5'),thermal_max_ma)
+        ev={'kind':'calculation','locator':'calc:breadboard-options:'+circuit.fingerprint,
+            'inputs':{'input_voltage_max_V':str(vin_hi),'rail_V':str(rail),'rail_current_max_mA':str(load_ma),'indicator_mA':str(ind_ma)},
+            'assumptions':'Linear LDO SOT-23 250 mW package dissipation ceiling and 250 mA current limit'}
+        def recalc(parameter,value):
+            from .architecture import propose,check_circuit
+            from .completion import reviewed_roles
+            from .validation import validate
+            trial=deepcopy(spec)
+            old=trial.current[parameter]
+            trial.revision+=1
+            trial.entries.append(replace(old,value=value,state=State.INFERRED,quote='',source='calculation:counterfactual',
+                                         revision=trial.revision,rationale='Unapplied necessary-bound scenario, not a user requirement'))
+            tested=propose(trial,circuit.selections,{})
+            reviewed_roles(tested);check_circuit(trial,tested);validate(trial,tested)
+            return {'counterfactual':True,'applied':False,'accepted':False,'trial_value':str(value),
+                    'checks':to_jsonable(tested.checks),'estimates':tested.estimates}
+        common={'applied':False,'accepted':False,'application_status':'unverified','selected_component':None,
+                'evidence':ev,'runtime_check':{'status':'unverified','reason':'Counterfactual thermal/current bound only; board copper and ambient derating remain unknown'},
+                'assembly_cost':None}
+        item=spec.current.get('rail_current_max')
+        return {'status':'conditional_analysis','requirements_changed':False,'options':[
+            {**common,'name':'Lower continuous 3.3 V rail current (for SOT-23 LDO)','parameter':'rail_current_max',
+             'necessary_bound':str(bound_ma),'unit':'mA',
+             'changes_confirmed_requirement':bool(item and item.binding),'requires_owner_confirmation':True,
+             'consequences':'At most this continuous load current fits within both the 250 mA XC6206 limit and the 250 mW SOT-23 dissipation limit at maximum input voltage.',
+             'recalculation':recalc('rail_current_max',bound_ma)},
+            {**common,'name':'Alternative switched-mode converter architecture','parameter':None,'necessary_bound':None,
+             'requires_owner_confirmation':True,'changes_confirmed_requirement':False,
+             'recalculation':{'checks':to_jsonable(circuit.checks),'baseline_only':True,
+                              'note':'Reviewed buck-boost alternatives (TPS63802 / TPS63031) are evaluated in the architecture comparison above.'},
+             'consequences':'Switching to a reviewed buck-boost converter clears the 500 mA current and linear SOT-23 thermal screens without lowering the owner load requirement.'}
+        ]}
     capacity,target,hi,rail=(spec.get(k) for k in ('battery_capacity','runtime','battery_max','logic_voltage'))
     current=circuit.estimates.get('led_average_A')
     rows,cols=spec.get('led_rows'),spec.get('led_columns')
@@ -133,7 +191,7 @@ def sourcing_triage(report):
             add('missing_exact_identity','No usable official observation for the expected identity.' if role.get('mpn') else 'No justified exact manufacturer/MPN selected.')
             if not role.get('package') or (not role.get('parameters') and not role.get('mpn')):
                 add('missing_manufacturer_evidence','Electrical/package/reference contract is incomplete; no random part search.')
-            if role['name'] in {'cell','charge_program','led_elements','current_setting'}:
+            if role['name'] in {'cell','charge_program','led_elements','current_setting','breadboard_rail_headers','rail_selector_header'}:
                 add('missing_user_requirement','Cell/charge or LED operating target needs confirmation and independent evidence.')
         for failure in report.get('source_failures',[]):
             if failure.get('line') in {None,row['line_id']}:
@@ -183,3 +241,38 @@ def revise_from_owner(session, parameter, answer, execute):
     report=session.design_report()
     session.recorder.log('owner_revision_result',parameter=parameter,report=report,actor='controller',model_calls=0)
     return report
+
+
+def ai_default_for_gap(spec, gap_id: str) -> tuple[str, str]:
+    """Return a sensible engineering provisional default (value, rationale) when the operator delegates a requirement."""
+    is_bb = "breadboard_power" in getattr(spec, "features", [])
+    defaults = {
+        "logic_voltage": ("3.3V", "AI provisional default: standard 3.3 V primary logic rail"),
+        "secondary_rail_voltage": ("5V", "AI provisional default: standard 5 V secondary breadboard rail"),
+        "input_voltage_min": ("4.75V", "AI provisional default: USB-C VBUS 5 V lower operating bound"),
+        "input_voltage_max": ("5.25V", "AI provisional default: USB-C VBUS 5 V upper operating bound"),
+        "rail_current_max": ("500mA", "AI provisional default: 500 mA maximum continuous load current"),
+        "input_interface": ("usb_c", "AI provisional default: USB-C 5 V sink input with 5.1 kOhm CC1/CC2 pulldowns"),
+        "rail_selection": ("jumper_selectable", "AI provisional default: 1x3P 2.54 mm shunt jumper headers per breadboard side"),
+        "width": ("53mm" if is_bb else "45mm", "AI provisional default: standard compact PCB width"),
+        "height": ("32mm" if is_bb else "45mm", "AI provisional default: standard compact PCB height"),
+        "board_quantity": ("5", "AI provisional default: 5 prototype boards"),
+        "parts_budget": ("4USD" if is_bb else "12USD", "AI provisional default: target component-only budget per board"),
+        "runtime": ("24h", "AI provisional default: 24-hour battery runtime target"),
+        "battery_capacity": ("500mAh", "AI provisional default: 500 mAh LiPo pouch cell"),
+        "battery_min": ("3.0V", "AI provisional default: 3.0 V LiPo discharge cutoff"),
+        "battery_max": ("4.2V", "AI provisional default: 4.2 V LiPo full charge voltage"),
+        "charging_use": ("usb_c_onboard", "AI provisional default: onboard USB-C linear LiPo charger"),
+        "led_rows": ("5", "AI provisional default: 5 LED matrix rows"),
+        "led_columns": ("5", "AI provisional default: 5 LED matrix columns"),
+        "led_count": ("25", "AI provisional default: 25 LEDs"),
+        "led_type": ("monochrome", "AI provisional default: monochrome SMD LEDs"),
+        "led_arrangement": ("matrix_grid", "AI provisional default: matrix grid arrangement"),
+        "led_brightness": ("indoor_indicator", "AI provisional default: indoor indicator brightness"),
+        "led_drive": ("direct_gpio", "AI provisional default: direct GPIO / matrix drive"),
+        "led_average_current": ("2mA", "AI provisional default: 2 mA average current per LED"),
+        "nfc_mode": ("tag_only", "AI provisional default: passive NFC tag mode"),
+        "microphone_use": ("pdm_digital", "AI provisional default: digital PDM MEMS microphone"),
+    }
+    return defaults.get(gap_id, ("1", f"AI provisional default for {gap_id}"))
+

@@ -12,7 +12,7 @@ def alternatives(spec,current):
     failed=[c.check for c in current.checks if c.status.value=='fail']
     choices=[('current',dict(current.selections))]
     if 'power' in current.selections:
-        for p in all_patterns().values():
+        for p in all_patterns(spec.features).values():
             if p.block=='power' and p.id!=current.selections['power']:
                 choices.append(('power:'+p.id,{**current.selections,'power':p.id}))
     rows=[]
@@ -38,6 +38,6 @@ def alternatives(spec,current):
                 'meaning':'necessary ideal lower bound only; exact cell, other loads, losses, discharge profile and mechanical fit unresolved',
                 'selected_battery':None,'requirement_changed':False})
     return {'schema':'partlens.architecture-alternatives/1','requirements_fingerprint':spec.fingerprint,
-            'trigger_failures':failed,'affected_blocks':sorted(set(current.selections)&{'power','controller','led_matrix','charging','protection'}),
+            'trigger_failures':failed,'affected_blocks':sorted(set(current.selections)&{'power','controller','led_matrix','charging','protection','input_power','rail_output','indicator'}),
             'alternatives':to_jsonable(rows),'energy_remedies':remedies,'accepted_design':None,
             'rule':'Only a fully evidenced accepted gate can select a final design. Investigating an alternative does not accept it.'}

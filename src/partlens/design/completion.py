@@ -7,6 +7,10 @@ from .patterns import Role, cap
 ROLE_LEADS={
     ('controller','enable_pullup'):(('C25744','0402WGF1002TCE'),),
     ('led_matrix','current_setting'):(('C25765','0402WGF2002TCE'),),
+    ('input_power','cc_pulldown'):(('C25905','0402WGF5101TCE'),),
+    ('input_power','protection_diode'):(('C8598','B5819W SL'),),
+    ('indicator','led_resistor'):(('C11702','0402WGF1001TCE'),),
+    ('power','regulator'):(('C347376','XC6206P332MR'),),
 }
 
 

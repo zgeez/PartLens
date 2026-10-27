@@ -17,7 +17,7 @@ from ..session import Session, ToolError, _cost_view, part_view
 from ..sources.catalog import record_from_row
 from .architecture import Circuit, propose, check_circuit
 from .patterns import PATTERNS, library, all_patterns, get_pattern
-from .requirements import Requirements, State, parse, FIELDS
+from .requirements import Requirements, State, parse, FIELDS, ALL_FIELDS
 
 
 class DesignSession(Session):
@@ -108,8 +108,14 @@ class DesignSession(Session):
         return self.design_requirements()
 
     def design_requirements(self):
+        if "breadboard_power" in self.spec.features:
+            fields = {k: ALL_FIELDS[k] for k in ("logic_voltage", "secondary_rail_voltage", "input_voltage_min",
+                                                 "input_voltage_max", "rail_current_max", "input_interface",
+                                                 "rail_selection", "width", "height", "board_quantity", "parts_budget")}
+        else:
+            fields = FIELDS
         result={**self.spec.view(),"gaps":self.spec.gaps(interview=self.interaction_mode),
-                "parameter_contracts":{k:{"domain":domain,"unit_or_allowed_values":kind} for k,(domain,kind) in FIELDS.items()},
+                "parameter_contracts":{k:{"domain":domain,"unit_or_allowed_values":kind} for k,(domain,kind) in fields.items()},
                 "rule":"Agent defaults are proposed scenario values, never user-confirmed requirements."}
         if self.interaction_mode:
             from .interaction import clarification_plan
@@ -177,11 +183,16 @@ class DesignSession(Session):
 
     def design_patterns(self):
         # Compact model view; full reviewed role definitions remain in library() and exported circuit records.
+        from .patterns import required_blocks
+        pats = (all_patterns(self.spec.features) if self.engineering_mode else PATTERNS).values()
+        if "breadboard_power" in self.spec.features:
+            needed_blocks = required_blocks(self.spec.features)
+            pats = [p for p in pats if p.block in needed_blocks]
         return {"schema":"partlens.patterns/1","patterns":[{
             "id":p.id,"block":p.block,"function":p.function,"reference":p.reference,
             "reviewed_reference":p.reviewed,"hardware_validated":False,"supply":p.supply,
             "support_roles":[r.name for r in p.roles],"omissions":p.omissions}
-            for p in (all_patterns() if self.engineering_mode else PATTERNS).values()]}
+            for p in pats]}
 
     def propose_design_architecture(self,selections_json: str,justification: str=""):
         try:

@@ -177,6 +177,9 @@ def required_blocks(features: list[str]) -> set[str]:
     if "ble" in features: blocks.add("controller")
     blocks |= set(features) & {"led_matrix", "imu", "nfc", "microphone", "temperature"}
     if "rechargeable" in features: blocks |= {"power", "charging", "protection"}
+    if "breadboard_power" in features:
+        if "ble" not in features: blocks.discard("debug")
+        blocks |= {"input_power", "power", "rail_output", "indicator"}
     return blocks
 
 
@@ -185,10 +188,10 @@ def library() -> dict:
             "note": "A reviewed reference is not a validated implementation. Missing identities and support roles remain unresolved."}
 
 
-def all_patterns():
+def all_patterns(features: list[str] | tuple[str, ...] = ()):
     from .extensions import load_extensions
-    return {**load_extensions(),**PATTERNS}
+    return {**load_extensions(features),**PATTERNS}
 
 
 def get_pattern(pid):
-    return all_patterns()[pid]
+    return all_patterns(("breadboard_power",))[pid]

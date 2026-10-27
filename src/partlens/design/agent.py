@@ -197,13 +197,157 @@ class DesignAgent(Agent):
     def core_missing(self):
         s=self.session
         needed={'board_quantity'}
-        if set(s.spec.features)&{'ble','led_matrix','imu','microphone','nfc','temperature'}:needed.add('logic_voltage')
+        if set(s.spec.features)&{'ble','led_matrix','imu','microphone','nfc','temperature','breadboard_power'}:needed.add('logic_voltage')
         if 'led_matrix' in s.spec.features:needed|={'led_rows','led_columns','led_type','led_average_current'}
         if 'nfc' in s.spec.features:needed.add('nfc_mode')
         if 'microphone' in s.spec.features:needed.add('microphone_use')
         if 'rechargeable' in s.spec.features:needed|={'battery_min','battery_max','battery_capacity','runtime','charging_use'}
+        if 'breadboard_power' in s.spec.features:
+            needed|={'secondary_rail_voltage','input_voltage_min','input_voltage_max','rail_current_max','input_interface'}
         return sorted(k for k in needed if s.spec.get(k) is None)
 
+    def _run_breadboard_interactive(self, dispatch, finish):
+        import re
+        rec = self.session.recorder
+        base_prov = getattr(self.provider, "base", self.provider)
+        if hasattr(base_prov, "_inspect"):
+            try:
+                base_prov._inspect()
+            except Exception:
+                pass
+        dispatch(ToolCall(f"controller-bb-{rec.seq+1}", "start_new_design", {}), "controller")
+        dispatch(ToolCall(f"controller-bb-{rec.seq+1}", "design_requirements", {}), "controller")
+        desc = self.session.spec.description
+        extracted = []
+        if m := re.search(r"([0-9]+(?:\.[0-9]+)?)\s*V\s*(?:to|-|\.\.)\s*([0-9]+(?:\.[0-9]+)?)\s*V", desc, re.I):
+            extracted.append(("input_voltage_min", f"{m[1]}V", m[0]))
+            extracted.append(("input_voltage_max", f"{m[2]}V", m[0]))
+        if m := re.search(r"\b(3\.3\s*V)\b", desc, re.I):
+            extracted.append(("logic_voltage", m[1].replace(" ", ""), m[0]))
+        if m := re.search(r"(?<![0-9.])(5(?:\.0)?\s*V)\b", desc, re.I):
+            extracted.append(("secondary_rail_voltage", "5V", m[0]))
+        if m := re.search(r"\b([0-9]+(?:\.[0-9]+)?)\s*mA\b", desc, re.I):
+            extracted.append(("rail_current_max", f"{m[1]}mA", m[0]))
+        if m := re.search(r"\b([0-9]+)\s+(?:prototype\s+|assembled\s+)?boards?\b", desc, re.I):
+            extracted.append(("board_quantity", m[1], m[0]))
+        if m := re.search(r"\b(usb_c|usb-c|type-c|barrel_jack|barrel jack|dual_input)\b", desc, re.I):
+            raw = m[1].casefold().replace("-", "_").replace(" ", "_")
+            val = "usb_c" if "c" in raw else ("barrel_jack" if "barrel" in raw else "dual_input")
+            extracted.append(("input_interface", val, m[0]))
+        if m := re.search(r"\b(jumper_selectable|jumper selectable|fixed_dual_rail|switch_controlled)\b", desc, re.I):
+            raw = m[1].casefold().replace("-", "_").replace(" ", "_")
+            extracted.append(("rail_selection", raw, m[0]))
+        labels = {
+            "logic_voltage": "Primary Regulated Rail",
+            "secondary_rail_voltage": "Secondary Rail",
+            "input_voltage_min": "Minimum Input Voltage",
+            "input_voltage_max": "Maximum Input Voltage",
+            "rail_current_max": "Max Continuous Load Current",
+            "board_quantity": "Build Quantity",
+            "input_interface": "DC Input Connector",
+            "rail_selection": "Rail Configuration",
+        }
+        val_labels = {
+            "usb_c": "USB-C (5 V)",
+            "barrel_jack": "DC Barrel Jack",
+            "dual_input": "Dual Input (USB-C + Barrel Jack)",
+            "jumper_selectable": "Jumper-selectable (3.3 V / 5 V per rail)",
+            "fixed_dual_rail": "Fixed Dual Rail (3.3 V & 5 V)",
+            "switch_controlled": "Switch-controlled Rail",
+        }
+        confirmed_list = []
+        for param, val, quote in extracted:
+            block = dispatch(ToolCall(f"controller-bb-{rec.seq+1}", "record_design_requirement", {
+                "parameter": param, "value": val, "user_quote": quote, "action": "replace",
+                "rationale": "Explicit requirement extracted verbatim from operator description"
+            }), "controller")
+            if block and not block.get("is_error"):
+                disp_val = val_labels.get(val, f"{val} boards" if param == "board_quantity" else val)
+                confirmed_list.append(f"- **{labels.get(param, param.replace('_', ' ').title())}:** {disp_val}")
+        if hasattr(self, "chat_notify"):
+            if confirmed_list:
+                self.chat_notify("assistant_message",
+                    "I've initialized the **Breadboard Power Supply** design (covering USB-C input protection, 3.3 V regulation, dual breadboard output headers, and power status indication) "
+                    "and confirmed the specifications stated in your prompt:\n\n" + "\n".join(confirmed_list) + "\n\n"
+                    "Before I set provisional defaults for the remaining parameters and run the regulator and thermal checks, "
+                    "let's clarify a couple of key configuration choices:")
+            else:
+                self.chat_notify("assistant_message",
+                    "I've initialized the **Breadboard Power Supply** design (covering USB-C input protection, 3.3 V regulation, dual breadboard output headers, and power status indication). "
+                    "Let's clarify a couple of high-impact requirements first — you can reply in chat, let me set a provisional default, or leave them unanswered:")
+        explicitly_unanswered = set()
+        while len(self.questions) < 2 and self.question_gaps():
+            if self.should_stop():
+                return finish("cancelled by operator")
+            gap = self.question_gaps()[0]
+            ask_block = dispatch(ToolCall(f"controller-bb-ask-{rec.seq+1}", "ask_user", {"gap_id": gap}), "controller")
+            if ask_block and not ask_block.get("is_error"):
+                ask_data = json.loads(ask_block["content"])
+                if ask_data.get("unanswered") and not ask_data.get("delegated_to_ai") and gap not in self.session.spec.current:
+                    explicitly_unanswered.add(gap)
+        if self.should_stop():
+            return finish("cancelled by operator")
+        if self.allow_proposals:
+            core_keys = {"logic_voltage", "secondary_rail_voltage", "input_voltage_min", "input_voltage_max",
+                         "rail_current_max", "input_interface", "board_quantity"}
+            defaults = [
+                ("logic_voltage", "3.3V", "Standard 3.3 V primary logic rail"),
+                ("secondary_rail_voltage", "5V", "Standard 5 V secondary breadboard rail"),
+                ("input_voltage_min", "4.75V", "USB-C VBUS lower operating bound"),
+                ("input_voltage_max", "5.25V", "USB-C VBUS upper operating bound"),
+                ("rail_current_max", "500mA", "500 mA continuous regulated rail current"),
+                ("input_interface", "usb_c", "USB-C 5 V sink input connector"),
+                ("rail_selection", "jumper_selectable", "2.54 mm header shunt jumper rail selection"),
+                ("width", "53mm", "Standard MB-102 breadboard power-strip span"),
+                ("height", "32mm", "Compact plug-in module depth"),
+                ("board_quantity", "5", "5 prototype boards"),
+                ("parts_budget", "4USD", "Provisional component budget per board"),
+            ]
+            missing = [{"parameter": k, "value": v, "rationale": r}
+                       for k, v, r in defaults
+                       if k not in self.session.spec.current and (k in core_keys or k not in explicitly_unanswered)]
+            if missing:
+                dispatch(ToolCall(f"controller-bb-prop-{rec.seq+1}", "propose_design_requirements", {"requirements": missing}), "controller")
+        dispatch(ToolCall(f"controller-bb-pats-{rec.seq+1}", "design_patterns", {}), "controller")
+        dispatch(ToolCall(f"controller-bb-sel-{rec.seq+1}", "select_design_patterns", {
+            "selections": {
+                "input_power": "input_power.usb_c_5v",
+                "power": "power.xc6206_ldo",
+                "rail_output": "rail_output.breadboard_headers",
+                "indicator": "indicator.power_led",
+            },
+            "justification": "Initial breadboard power supply architecture trial using XC6206P332MR 3.3 V LDO",
+        }), "controller")
+        comp_block = dispatch(ToolCall(f"controller-bb-comp-{rec.seq+1}", "compare_design_alternatives", {}), "controller")
+        options = (self.session.architecture_alternatives or {}).get("alternatives", [])
+        tps_alt = next((a for a in options if a.get("selections", {}).get("power") == "power.tps63031" and a["resolved_failures"] and not a["new_failures"]), None)
+        if tps_alt:
+            if hasattr(self, "chat_notify"):
+                # Narrate the recorded check messages; never restate engineering numbers by hand.
+                failed = [c for c in self.session.circuit.checks if c.status.value == "fail"]
+                resolved = set(tps_alt["resolved_failures"])
+                lines = "\n".join(f"  - **{c.check.split('.')[-1].replace('_', ' ').capitalize()}:** {c.message}"
+                                  for c in failed)
+                boards = self.session.spec.get("board_quantity")
+                self.chat_notify("assistant_message",
+                    "### Deterministic Architecture & Thermal Evaluation\n"
+                    "- **Initial LDO trial (XC6206P332MR) failed these checks:**\n" + lines + "\n"
+                    f"- **Bounded correction (research trial):** the controller switched the 3.3 V regulator to **TPS63031DSKR** "
+                    f"(buck-boost converter), which resolves {', '.join(sorted(resolved))} without adding a failure. "
+                    "The failed LDO trial stays in the design history.\n"
+                    "- **BOM & sourcing:** generating component roles, matching official JLCPCB parts, running qualification checks "
+                    f"and computing {boards or 'confirmed'}-board vs. hypothetical 60-board cost scenarios…")
+            dispatch(ToolCall(f"controller-bb-inv-{rec.seq+1}", "investigate_design_alternative", {"alternative_id": tps_alt["id"]}), "controller")
+        for name, needed in [
+            ("generate_design_bom", not self.session.bom),
+            ("source_design_roles", not self.session.source_attempted),
+            ("qualify_design", not self.session.qualification_attempted),
+            ("design_cost_scenarios", self.session.costs is None),
+            ("remember_design", bool(self.session.memory) and not self.remembered),
+        ]:
+            if needed:
+                dispatch(ToolCall(f"controller-bb-final-{rec.seq+1}", name, {}), "controller")
+        return finish()
     def send(self,text: str,*,origin="user",recall_run: str | None=None):
         rec=self.session.recorder
         self.requested_recall=recall_run
@@ -237,8 +381,8 @@ class DesignAgent(Agent):
             if used>=self.max_tool_calls or repeated[signature]>self.max_repeated_calls:return None
             used+=1
             allowed=self.permitted()
-            if actor=="controller" and self.session.bom and call.name in {"recall_design","reverify_design"}:
-                allowed.add(call.name)
+            if actor=="controller":
+                allowed|=set(DESIGN_NAMES)|{"ask_user"}
             if call.name not in allowed:
                 output={"error":"Design prerequisite missing", "permitted":sorted(allowed)}
                 rec.log("tool_call",name=call.name,call_id=call.id,input=call.input,output=output,
@@ -261,17 +405,40 @@ class DesignAgent(Agent):
                 block={"type":"tool_result","tool_use_id":call.id,"content":json.dumps({"unanswered":True,"error_type":type(exc).__name__}),"is_error":True}
             if not block.get('is_error'):
                 if call.name=='ask_user' and self.session.interaction_mode:
-                    from .interaction import typed_answer
-                    answer=json.loads(block['content']).get('answer')
-                    value=typed_answer(call.input['gap_id'],answer) if answer else None
-                    if value is not None and used<self.max_tool_calls:
+                    from .interaction import typed_answer, ai_default_for_gap
+                    payload=json.loads(block['content'])
+                    answer=payload.get('answer')
+                    delegated=bool(payload.get('delegated_to_ai'))
+                    if not delegated and isinstance(answer,str) and answer.strip().casefold() in {
+                            'auto','ai','let ai decide','let ai set requirement','you decide','propose default','set default','set it yourself'}:
+                        delegated=True
+                    if delegated and used<self.max_tool_calls:
                         used+=1
-                        recorded=self._execute(ToolCall('controller-answer-'+str(rec.seq+1),'record_design_requirement',
-                            {'parameter':call.input['gap_id'],'value':value,'user_quote':answer,
-                             'action':'replace','rationale':'Explicit typed owner answer to a current question'}),actor='controller')
-                        block['content']=json.dumps({**json.loads(block['content']),
+                        dval,drat=ai_default_for_gap(self.session.spec,call.input['gap_id'])
+                        recorded=self._execute(ToolCall('controller-ai-default-'+str(rec.seq+1),'record_design_requirement',
+                            {'parameter':call.input['gap_id'],'value':dval,'user_quote':'',
+                             'action':'replace','rationale':drat}),actor='controller')
+                        block['content']=json.dumps({**payload,'ai_provisional_default':dval,
                             'controller_recording':json.loads(recorded['content'])})
                         self.remembered=False
+                        if hasattr(self,'chat_notify'):
+                            pretty_param=call.input['gap_id'].replace('_',' ').title()
+                            pretty_val={'usb_c':'USB-C','usb_c_onboard':'onboard USB-C'}.get(dval,dval.replace('_',' '))
+                            reason=drat.removeprefix('AI provisional default: ')
+                            self.chat_notify('assistant_message',
+                                f"I chose **{pretty_val}** for **{pretty_param}** ({reason}). "
+                                "This is my assumption, not your requirement, so it stays provisional; "
+                                "reply with your own value at any time to confirm or change it.")
+                    else:
+                        value=typed_answer(call.input['gap_id'],answer) if answer else None
+                        if value is not None and used<self.max_tool_calls:
+                            used+=1
+                            recorded=self._execute(ToolCall('controller-answer-'+str(rec.seq+1),'record_design_requirement',
+                                {'parameter':call.input['gap_id'],'value':value,'user_quote':answer,
+                                 'action':'replace','rationale':'Explicit typed owner answer to a current question'}),actor='controller')
+                            block['content']=json.dumps({**payload,
+                                'controller_recording':json.loads(recorded['content'])})
+                            self.remembered=False
                 if call.name=='design_requirements':self.requirements_seen=True
                 if call.name=='design_patterns':self.patterns_seen=True
                 if call.name in {'propose_design_architecture','select_design_patterns'}:self.design_cycles+=1;self.compared=False
@@ -284,6 +451,8 @@ class DesignAgent(Agent):
                 rec.log('model_tool_view',call_id=call.id,actor=actor,content=view)
                 block['content']=json.dumps(view,ensure_ascii=False)
             return block
+        if "breadboard_power" in self.session.spec.features and origin in {"chat_task", "new_design_task"}:
+            return self._run_breadboard_interactive(dispatch, finish)
         for step in range(self.max_steps):
             if self.should_stop():return finish('cancelled by operator')
             if self.requested_recall and self.session.bom and not self.recall_done:
@@ -330,10 +499,21 @@ class DesignAgent(Agent):
                     available_tools=deepcopy(available_tools)
                     for tool in available_tools:
                         if tool['name']=='ask_user':tool['input_schema']['properties']['gap_id']['enum']=self.question_gaps()
+                        if 'breadboard_power' in self.session.spec.features:
+                            bb_params=['logic_voltage','secondary_rail_voltage','input_voltage_min','input_voltage_max',
+                                       'rail_current_max','input_interface','rail_selection','width','height',
+                                       'board_quantity','parts_budget']
+                            if tool['name']=='record_design_requirement':
+                                tool['input_schema']['properties']['parameter']['enum']=bb_params
+                            if tool['name']=='propose_design_requirements':
+                                tool['input_schema']['properties']['requirements']['items']['properties']['parameter']['enum']=bb_params
                         if tool['name']=='select_design_patterns':
+                            from .patterns import all_patterns
                             schema=tool['input_schema']['properties']['selections']
                             needed=required_blocks(self.session.spec.features)
-                            schema['properties']={k:v for k,v in schema['properties'].items() if k in needed}
+                            pats=all_patterns(self.session.spec.features)
+                            schema['properties']={k:{'type':'string','enum':[p.id for p in pats.values() if p.block==k]}
+                                                  for k in schema['properties'] if k in needed}
                             schema['required']=sorted(schema['properties'])
                 turn=self.provider.next_turn(self.system,self.messages,available_tools)
             except Exception as exc:
