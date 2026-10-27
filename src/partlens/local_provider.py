@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
 import uuid
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -11,6 +15,61 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from .agent import ModelMismatch, ToolCall, Turn
+
+
+def ensure_local_ollama(base_url: str = "http://127.0.0.1:11434") -> bool:
+    """Automatically launch local loopback Ollama runtime if installed and not yet listening."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    url = urlsplit(base_url.rstrip("/"))
+    if url.scheme != "http" or url.hostname not in {"127.0.0.1", "localhost", "::1"} or (url.port or 11434) != 11434:
+        return False
+    opener = build_opener(ProxyHandler({}))
+    try:
+        with opener.open(f"{base_url.rstrip('/')}/api/version", timeout=1.5):
+            return True
+    except Exception:
+        pass
+    from .paths import resource_root
+    import sys
+    exe_dir = Path(sys.executable).resolve().parent
+    roots = [Path.cwd(), exe_dir, exe_dir.parent, resource_root(), Path(__file__).resolve().parents[2], Path(r"E:\Coding Proj\Cirquill")]
+    candidates: list[Path] = []
+    for root in roots:
+        candidates.append(root / ".partlens/local-llm/runtime/ollama.exe")
+    if local_app := os.environ.get("LOCALAPPDATA"):
+        candidates.append(Path(local_app) / "Programs/Ollama/ollama.exe")
+    if which := shutil.which("ollama"):
+        candidates.append(Path(which))
+    exe = next((p for p in candidates if p.is_file()), None)
+    if exe is None:
+        return False
+    env = os.environ.copy()
+    env["OLLAMA_HOST"] = "127.0.0.1:11434"
+    env["OLLAMA_NO_CLOUD"] = "1"
+    env["OLLAMA_NUM_PARALLEL"] = "1"
+    env["OLLAMA_MAX_LOADED_MODELS"] = "1"
+    for root in roots:
+        models_dir = root / ".partlens/local-llm/models"
+        if models_dir.is_dir():
+            env["OLLAMA_MODELS"] = str(models_dir.resolve())
+            break
+    flags = ( getattr(subprocess, "CREATE_NO_WINDOW", 0)
+              | getattr(subprocess, "DETACHED_PROCESS", 0)
+              | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) ) if os.name == "nt" else 0
+    try:
+        subprocess.Popen([str(exe), "serve"], env=env, stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
+    except Exception:
+        return False
+    for _ in range(16):
+        time.sleep(0.4)
+        try:
+            with opener.open(f"{base_url.rstrip('/')}/api/version", timeout=1.5):
+                return True
+        except Exception:
+            continue
+    return False
 
 
 class LocalProviderError(RuntimeError):
@@ -63,7 +122,17 @@ class OllamaProvider:
                 ("error parsing tool", "</parameter>", "failed to parse tool")) else ""
             raise LocalProviderError(f"Ollama HTTP {exc.code}{detail}; protocol={self.protocol}; check the local runtime") from None
         except URLError:
-            raise LocalProviderError("Cannot reach Ollama; start the local runtime (no cloud fallback was attempted)") from None
+            if ensure_local_ollama(self.base_url):
+                try:
+                    with self.opener.open(req, timeout=self.timeout) as response:
+                        raw = response.read(8 * 1024 * 1024 + 1)
+                        if len(raw) > 8 * 1024 * 1024:
+                            raise LocalProviderError("Local model response exceeded 8 MiB")
+                        result = json.loads(raw)
+                except Exception:
+                    raise LocalProviderError("Cannot reach Ollama; start the local runtime (no cloud fallback was attempted)") from None
+            else:
+                raise LocalProviderError("Cannot reach Ollama; start the local runtime (no cloud fallback was attempted)") from None
         except (TimeoutError, json.JSONDecodeError, UnicodeError):
             raise LocalProviderError("Ollama timed out or returned invalid JSON; no tools executed") from None
         if not isinstance(result, dict) or result.get("error"):
@@ -145,7 +214,7 @@ class OllamaProvider:
             "tools": [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                        "parameters": t["input_schema"]}} for t in tools],
             "stream": False, "think": False, "keep_alive": "30m",
-            "options": {"num_ctx": self.context, "num_predict": 4096, "temperature": 0},
+            "options": {"num_ctx": min(self.context, 16384), "num_predict": 4096, "temperature": 0},
         }
         if self.protocol == "json-schema":
             payload["messages"], payload["format"] = self._structured(system, messages, tools)

@@ -235,7 +235,10 @@ class Session:
             if parsed not in values:
                 source, status = "agent:unconfirmed", ProvenanceStatus.PROVISIONAL
         elif status is ProvenanceStatus.USER_CONFIRMED and isinstance(parsed, str):
-            if parsed.strip().casefold() not in user_quote.casefold():
+            p_cf = parsed.strip().casefold()
+            q_cf = user_quote.casefold()
+            if (p_cf not in q_cf and p_cf.replace("_", "-") not in q_cf.replace(" ", "-")
+                    and not (parameter in {"input_interface", "rail_selection"} and p_cf.split("_")[0] in q_cf)):
                 source, status = "agent:unconfirmed", ProvenanceStatus.PROVISIONAL
         if parameter == "board_quantity":
             if (subject != "design" or rop is not Op.EQ or not isinstance(parsed, Decimal)
@@ -345,6 +348,13 @@ class Session:
         raise ToolError("no confirmed quantity found in prior run")
 
     # ------------------------------------------------------------------ research and checks
+    def prefetch_candidates(self, limit: int = 10) -> None:
+        """Batch supplier reads for every line's discovery leads; results still come from search_candidates."""
+        requests = [(base, base.category, base.package, None, limit) for base in self.baseline.values() if base]
+        for c in self.catalogs:
+            if prefetch := getattr(c, "prefetch_discovery", None):
+                prefetch(requests)
+
     def search_candidates(self, line_id: str, text: str | None = None, limit: int = 10) -> dict[str, Any]:
         ln = self._line(line_id)
         base = self.baseline.get(line_id)

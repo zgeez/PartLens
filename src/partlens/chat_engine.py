@@ -1,6 +1,7 @@
 """Chat presentation over the existing bounded agents; only existing deterministic tools decide engineering."""
 from collections import Counter
 import hashlib
+from decimal import Decimal
 import json
 from pathlib import Path
 
@@ -51,6 +52,55 @@ def design_summary(report,*,cancelled=False):
         f"{len(report.get('bom',[]))} component roles · {counts['fail']} failed screens · {counts['unverified']} unresolved screens.",
         f'{qualified} roles meet their checked reference specification. Full application suitability is separate.']
     lines+=['\n'+c['message'] for c in checks if c['status']=='fail'][:3]
+    reqs=(report.get('requirements') or {}).get('requirements',{})
+    if reqs:
+        fmt_item=lambda k,v:f"**{k.replace('_',' ').title()}:** {str(v['value']).replace('_',' ')}{' '+v['unit'] if v.get('unit') else ''}"
+        confirmed=[fmt_item(k,v) for k,v in reqs.items() if v.get('binding')]
+        provisional=[fmt_item(k,v) for k,v in reqs.items() if not v.get('binding')]
+        req_lines=['### Requirements']
+        if confirmed:req_lines.append('- **Confirmed (from your prompt):** '+' · '.join(confirmed))
+        if provisional:req_lines.append('- **Provisional (AI defaults):** '+' · '.join(provisional))
+        lines.append('\n'.join(req_lines))
+    arch=report.get('architecture') or {}
+    if arch.get('selections'):
+        arch_lines=['### Architecture']
+        for block,pid in arch['selections'].items():
+            b_title=block.replace('_',' ').title()
+            p_title=pid.split('.',1)[-1].replace('_',' ').upper() if '.' in pid else pid
+            arch_lines.append(f"- **{b_title}:** {p_title} (`{pid}`)")
+        if report.get('architecture_history'):
+            prev=report['architecture_history'][-1].get('circuit',{}).get('selections',{})
+            if prev:
+                arch_lines.append(f"- **Autonomous Correction:** Replaced prior regulator trial ({', '.join(f'`{p}`' for b,p in prev.items() if arch['selections'].get(b)!=p)}) after deterministic current and thermal checks failed")
+        lines.append('\n'.join(arch_lines))
+    bom_rows=report.get('bom') or []
+    if bom_rows:
+        bom_lines=['### Generated BOM Roles']
+        for row in bom_rows:
+            role=row['role'];part=row.get('component');q=row.get('qualification') or {}
+            esc=lambda t:str(t).replace('*','\\*')  # supplier MPNs such as 2.54-1*3P contain Markdown markers
+            ident=f"**{esc(part['manufacturer'])} {esc(part['mpn'])}** (`{part['key']}`)" if part else (f"**{esc(role['mpn'])}**" if role.get('mpn') else '*Unresolved identity*')
+            r_name=role['name'].replace('_',' ').title()
+            bom_lines.append(f"- **{row['line_id']} ({', '.join(row['refs'])})** ×{role['quantity']} — {r_name}: {ident} (*{q.get('status','unverified')}*)")
+        lines.append('\n'.join(bom_lines))
+    scenarios=(report.get('costs') or {}).get('scenarios') or []
+    if scenarios:
+        cost_lines=['### Component Cost Scenarios']
+        for sc in scenarios:
+            c=sc['cost']
+            sc_label='Owner-confirmed quantity' if sc['scenario']=='user_confirmed' else 'Hypothetical volume scenario'
+            if c.get('component_complete'):
+                cost_lines.append(f"- **{sc['boards']} boards** (*{sc_label}*): component subtotal **{c['parts_total']} {c['currency']}**")
+                continue
+            # Never show a partial subtotal as a cost; report coverage and observed list prices separately.
+            lines_=c.get('lines') or [];priced=[l for l in lines_ if l.get('unit_price') is not None]
+            costed=sum(l.get('extended') is not None for l in lines_)
+            observed=sum((Decimal(l['unit_price'])*l['needed'] for l in priced),Decimal(0))/sc['boards']
+            cost_lines.append(f"- **{sc['boards']} boards** (*{sc_label}*): component cost **incomplete** — "
+                f"{costed} of {len(lines_)} lines costed under documented supplier terms. "
+                f"Observed JLCPCB unit prices for {len(priced)} lines sum to **{observed.quantize(Decimal('0.01'))} per board** "
+                "(currency, minimum order and order multiple not documented by the source; not a quotation)")
+        lines.append('\n'.join(cost_lines))
     if not report.get('architecture'):lines.append('No architecture was established. Review the recorded failure and unanswered requirements.')
     if (report.get('controller') or {}).get('stop_reason'):lines.append('Workflow: '+str(report['controller']['stop_reason']))
     lines.append('\nOpen Evidence for requirements, sources, checks and cost coverage. This is not a manufacturing-ready circuit.')
@@ -81,7 +131,7 @@ class ChatEngine:
         runner=cls(session,provider,ask,**kwargs);runner.chat_notify=notify;runner.chat_cancel=cancel
         return runner
 
-    def _finish(self,chat,session,root,*,cancelled=False):
+    def _finish(self,chat,session,root,*,cancelled=False,result=None):
         if isinstance(session,DesignSession):
             path=Path(export(session,root/'artifacts'))/'report.json'
             report=json.loads(path.read_text(encoding='utf-8'));text=design_summary(report,cancelled=cancelled)
@@ -91,7 +141,11 @@ class ChatEngine:
             report=review_snapshot(session);report['record']=str(session.recorder.path);report['mode']='bom_review'
             path=root/'artifacts/report.json';path.write_text(json.dumps(to_jsonable(report),indent=2),encoding='utf-8')
             decisions=report.get('Qualifications',[]);counts=Counter(r.get('status','unverified') for r in decisions)
-            text=('Stopped with a partial BOM review.' if cancelled else 'Your BOM review has been recorded.')+(
+            partial=result is not None and result.status!='completed_preliminary'
+            text=('Stopped with a partial BOM review.' if cancelled else
+                  'Partial BOM review recorded. '+(f'Stopped: {result.stopped_reason}. ' if result.stopped_reason else '')+
+                  'Missing steps: '+(', '.join(result.workflow.get('missing_actions',[])) or 'none')+'.' if partial else
+                  'Your BOM review has been recorded.')+(
                 f"\n\n{counts['verified']} specification-equivalent · {counts['rejected']} rejected · {counts['unverified']} unverified alternatives.\n\n"
                 'Application suitability, sourcing and costs remain separate. Open Evidence for the complete checks and unresolved inputs.')
         return {'report':str(path),'record':str(session.recorder.path),'mode':chat.mode,'text':text,'cancelled':cancelled}
@@ -117,7 +171,7 @@ class ChatEngine:
                 runner=self._runner(ChatAgent,session,ask,notify,cancel,max_steps=40,max_tool_calls=100)
                 try:runner.send(text,workflow=WorkflowRequest(str(bom_path),design='chat-'+chat.id,costs=True),origin='user')
                 except UserCancelled:rec.log('chat_cancelled',actor='user')
-            return self._finish(chat,session,root,cancelled=cancel.is_set())
+            return self._finish(chat,session,root,cancelled=cancel.is_set(),result=getattr(runner,'last_result',None))
 
     def explain(self,chat,text,notify,cancel):
         report=self.store.report(chat)

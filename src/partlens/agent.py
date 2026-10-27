@@ -8,6 +8,7 @@ missing, and explain the recorded results with their evidence.
 from __future__ import annotations
 
 import json
+import re
 import os
 import time
 from collections import Counter
@@ -311,6 +312,22 @@ class Agent:
             rec.log("model_tool_view", call_id=call.id, full_tool_event_seq=rec.seq,
                     content=json.loads(block["content"]), actor=actor)
             rec.log("workflow_state", snapshot=controller.snapshot(self.session))
+            follow = None
+            if actor == "model" and not block.get("is_error"):
+                quantity = re.fullmatch(r"\s*(\d+)\s*(?:boards?|pcs|units)?\s*\.?\s*", str(output.get("answer") or ""), re.I)
+                if call.name == "ask_user" and call.input.get("gap_id") == "design.board_quantity" and quantity:
+                    # The owner's typed answer is the quote; a model paraphrase would never confirm it and the
+                    # controller would block every later phase on the unrecorded quantity.
+                    follow = ToolCall(f"controller-quantity-{rec.seq+1}", "record_requirement",
+                                      {"subject": "design", "parameter": "board_quantity", "op": "==",
+                                       "value": quantity.group(1), "user_quote": output["answer"]})
+            if follow:
+                rec.log("controller_action", reason="deterministic follow-up to " + call.name, tool=follow.name, input=follow.input)
+                extra = dispatch(follow, "controller")
+                view = json.loads(block["content"])
+                if extra is not None and isinstance(view, dict):
+                    view["controller_followup"] = {"tool": follow.name, "result": json.loads(extra["content"])}
+                    block["content"] = json.dumps(view, ensure_ascii=False)
             return block
 
         for step in range(self.max_steps):
@@ -354,8 +371,24 @@ class Agent:
             if not turn.tool_calls:
                 if turn.stop_reason not in {"end_turn", "stop_sequence"}:
                     return finish(f"incomplete model response: {turn.stop_reason}")
-                if controller.snapshot(self.session)["operations_complete"]:
+                current = controller.snapshot(self.session)
+                if current["operations_complete"]:
                     return finish()
+                if not any(s["status"] == "pending" for s in current["states"]):
+                    # Only blocked work remains (e.g. unmatched lines); further model turns cannot resolve it.
+                    return finish("unresolved: " + ", ".join(current["missing_actions"]))
+                focus = next(s for s in current["states"] if s["status"] == "pending")
+                auto = next((t for t in ("find_missing_information", "match_parts") if t in focus["permitted_tools"]), None)
+                if auto:
+                    # A stalled model cannot block a deterministic step that takes no choices; the controller runs it.
+                    call = ToolCall(f"controller-{auto}-{rec.seq+1}", auto, {})
+                    rec.log("controller_action", reason="model stalled on a no-input deterministic step", tool=auto, input={})
+                    block = dispatch(call, "controller")
+                    if block is None:
+                        return finish("tool/repetition budget exhausted")
+                    self.messages.append({"role": "user", "content": f"Controller executed {auto} (not a model call): "
+                                          + block["content"]})
+                    continue
                 if controller.recoveries >= request.max_recoveries:
                     return finish("workflow recovery budget exhausted")
                 controller.recoveries += 1
@@ -392,6 +425,13 @@ class Agent:
                 raise
             if answer is None:
                 output = {"unanswered": True, "note": "No owner answer available; requirement remains unresolved"}
+                rec.log("tool_call", call_id=call.id, name=call.name, input=call.input, output=output,
+                        error=None, deterministic=False, actor=actor)
+                return {"type": "tool_result", "tool_use_id": call.id, "content": json.dumps(output)}
+            if answer == "__AI_DELEGATE__":
+                rec.log("user_message", text="Delegate requirement to AI provisional default.", in_reply_to=question)
+                output = {"delegated_to_ai": True, "unanswered": False,
+                          "note": "Operator delegated this requirement to AI; set a provisional (non-binding) default."}
                 rec.log("tool_call", call_id=call.id, name=call.name, input=call.input, output=output,
                         error=None, deterministic=False, actor=actor)
                 return {"type": "tool_result", "tool_use_id": call.id, "content": json.dumps(output)}

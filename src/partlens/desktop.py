@@ -18,8 +18,16 @@ def catalogs(settings, state):
     before=dict(os.environ)
     try:
         settings.apply();mode=settings.preferences['supplier_mode']
-        return catalogs_from_args(SimpleNamespace(jlc=mode in {'jlc','jlc_zetaris'},
-            zetaris=mode in {'zetaris','jlc_zetaris'}),state=state)
+        import sys
+        exe_dir=Path(sys.executable).resolve().parent
+        search_roots=[Path.cwd(),exe_dir,exe_dir.parent,resource_root(),Path(r"E:\Coding Proj\Cirquill")]
+        lead_file=next((r/'.partlens/cache/lcsc-easyduino.json' for r in search_roots if (r/'.partlens/cache/lcsc-easyduino.json').is_file()),None)
+        cats=catalogs_from_args(SimpleNamespace(jlc=mode in {'jlc','jlc_zetaris'},
+            zetaris=mode in {'zetaris','jlc_zetaris'},
+            jlc_leads=str(lead_file) if lead_file and mode in {'jlc','jlc_zetaris'} else None),state=state)
+        if mode=='jlc_zetaris' and cats and hasattr(cats[0],'base'):
+            return [cats[0],cats[0].base]
+        return cats
     except SystemExit:
         raise ValueError('Selected supplier mode is missing its required configuration. Fill its Settings tab.') from None
     finally:
@@ -103,10 +111,16 @@ def main(argv=None):
         with args.report.open('x',encoding='utf-8') as f:json.dump(result,f,indent=2)
         return 0 if result['services_available'] else 1
     try:
+        if not (home/'settings.json').exists() and Path('.env.local').is_file():
+            try:save_settings(home,import_env(Path('.env.local'),AppSettings()))
+            except Exception:pass
         settings=load_settings(home)
         if args.import_env:
             settings=import_env(args.import_env,settings);save_settings(home,settings)
         settings.apply()
+        import threading
+        from .local_provider import ensure_local_ollama
+        threading.Thread(target=ensure_local_ollama,args=(settings.preferences['PARTLENS_LOCAL_URL'],),daemon=True).start()
         state=home/'state'
         try:initial_catalogs=catalogs(settings,state)
         except ValueError:

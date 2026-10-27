@@ -45,13 +45,28 @@ class ConversationStore:
         if role not in {'user','assistant','system'} or not isinstance(text,str):raise ValueError('Invalid chat message')
         return self.append(chat,'chat_message',role=role,text=text,kind=kind,**metadata)
 
+    def _archived(self) -> set[str]:
+        idx=self.folder/'archived.json'
+        if not idx.is_file():return set()
+        try:
+            data=json.loads(idx.read_text(encoding='utf-8'))
+            return {x for x in data if isinstance(x,str)} if isinstance(data,list) else set()
+        except Exception:return set()
+
+    def delete(self,id: str) -> None:
+        target=self.path(id)
+        if not target.is_file():raise ValueError('Conversation not found')
+        archived=sorted(self._archived()|{id})
+        (self.folder/'archived.json').write_text(json.dumps(archived,indent=2),encoding='utf-8')
+
     def list(self):
+        archived=self._archived()
         result=[]
         for path in sorted(self.folder.glob('*.jsonl'),key=lambda p:p.stat().st_mtime,reverse=True):
             try:
                 if path.is_symlink():continue
                 id=path.stem
-                if path!=self.path(id):continue
+                if id in archived or path!=self.path(id):continue
                 first=json.loads(path.read_text(encoding='utf-8').splitlines()[0])
                 if first['type']=='conversation_created':result.append(Conversation(id,first['title'],first['mode'],path))
             except (ValueError,KeyError,IndexError):continue

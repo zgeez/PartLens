@@ -1,6 +1,7 @@
 """Local web presentation. The single explicit bridge dispatches existing Python engineering operations."""
 from contextlib import contextmanager
 import base64
+from datetime import UTC,datetime
 import hmac
 import json
 import os
@@ -46,7 +47,7 @@ def report_views(report):
 
 class DesktopBridge:
     """Only request() is exposed to the page; state/configuration objects remain private."""
-    def __init__(self,home,settings,catalogs,*,token=None,engine_factory=ChatEngine):
+    def __init__(self,home,settings,catalogs,*,token=None,engine_factory=ChatEngine,first_run=False):
         self._home=Path(home).resolve();self._state=self._home/'state';self._settings=settings
         self._catalogs=catalogs;self._lock=threading.RLock();self._token=token;self._window=None
         self._store=ConversationStore(self._state);self._engine=engine_factory(self._state,catalogs,self._store)
@@ -56,7 +57,7 @@ class DesktopBridge:
         self._status='Ready when you are.';self._revision=0;self._services=None;self._selected_bom=None
         self._bom_snapshot={};self._staged_settings=None;self._bom_agent=None
         self._projects=ProjectStore(self._state);self._project=None;self._bom_revision=None
-        self._bom_historical=False;self._project_job=None
+        self._bom_historical=False;self._project_job=None;self._setup_needed=bool(first_run);self._queued=[]
         self._demo=example_bom(self._home,synthetic=settings.preferences['supplier_mode']=='offline')
         self._new_bom()
         last=self._projects.last_project()
@@ -78,17 +79,18 @@ class DesktopBridge:
                     return {'ok':True,'unchanged':True}
                 handlers={
                     'snapshot':lambda p:None,'new_chat':self._new_chat,'select_chat':self._select_chat,
-                    'send':self._send,'answer':self._answer_question,'stop':self._stop,'select_bom':self._select_bom,
+                    'delete_chat':self._delete_chat,'bom_from_design':self._bom_from_design,
+                    'send':self._send,'unqueue':self._unqueue,'answer':self._answer_question,'stop':self._stop,'select_bom':self._select_bom,
                     'demo_bom':self._demo_bom,'revalidate':self._revalidate,'services':self._check_services,
                     'settings_open':self._settings_open,'settings_import':self._settings_import,
-                    'settings_save':self._settings_save,'notices':self._notices,'open_report':self._open_report,
+                    'settings_save':self._settings_save,'setup_skip':self._setup_skip,'notices':self._notices,'open_report':self._open_report,
                     'bom_load':self._bom_load,'bom_manual':self._bom_manual,'bom_live':self._bom_live,
                     'bom_cost':self._bom_cost,'bom_recall':self._bom_recall,'bom_new':self._bom_new,
                     'project_create':self._project_create,'project_select':self._project_select,
                     'bom_human_review':self._bom_human_review,'bom_export':self._bom_export,
                     'bom_audit':lambda p:self._bom_snapshot.get('Run record',{})}
                 if action not in handlers:raise ValueError('Unsupported desktop action')
-                if self._busy and action not in {'snapshot','answer','stop','notices'}:
+                if self._busy and action not in {'snapshot','answer','stop','notices','send','select_bom','unqueue','setup_skip','settings_open'}:
                     raise ValueError('Finish or stop the current operation first')
                 result=handlers[action](payload or {})
                 return {'ok':True,'result':result,'state':self._snapshot()}
@@ -184,7 +186,7 @@ class DesktopBridge:
         return {'preferences':dict(s.preferences),'configured':{k:bool(s.credentials.get(k)) for k in SECRET_KEYS},
                 'modes':MODES,'storage':str(self._home)}
     def _snapshot(self):
-        from .design.requirements import FIELDS
+        from .design.requirements import ALL_FIELDS
         prefs=self._settings.preferences
         return redact(to_jsonable({'revision':self._revision,'busy':self._busy,'job':self._job_kind,'status':self._status,
             'model':prefs['PARTLENS_LOCAL_MODEL'],'supplier':MODES[prefs['supplier_mode']],
@@ -195,7 +197,7 @@ class DesktopBridge:
             'bom':{k:v for k,v in self._bom_snapshot.items() if k!='Run record'},
             'project':self._project_view(),
             'bom_views':{k:format_view(k,v) for k,v in self._bom_snapshot.items() if k!='Run record'},
-            'services':self._services,'requirement_fields':{k:str(v[1]) for k,v in FIELDS.items()},
+            'services':self._services,'setup_needed':self._setup_needed,'queued':[q['text'] for q in self._queued],'requirement_fields':{k:str(v[1]) for k,v in ALL_FIELDS.items()},
             'can_revalidate':bool(self._report and self._report.get('mode')=='new_design' and self._report.get('architecture'))}))
     def _load_chat(self):
         self._messages=[e for e in self._store.events(self._chat) if e['type']=='chat_message'] if self._chat else []
@@ -210,6 +212,87 @@ class DesktopBridge:
         self._store.events(chat);self._store.report(chat)
         self._chat=chat;self._selected_bom=None;self._activity=[];self._load_chat()
         self._status='Saved results. Recheck evidence before relying on current availability.'
+    def _delete_chat(self,p):
+        cid=p.get('id','')
+        if not isinstance(cid,str) or not cid:raise ValueError('Select a conversation to delete')
+        self._store.delete(cid)
+        if self._chat and self._chat.id==cid:self._new_chat({})
+        else:self._touch()
+    def _bom_from_design(self,p):
+        if not self._report or self._report.get('mode')!='new_design' or not self._report.get('bom'):
+            raise ValueError('Generate a design BOM first')
+        import csv,re
+        folder=self._state/'design-boms';folder.mkdir(parents=True,exist_ok=True)
+        cid=self._chat.id if self._chat else 'design'
+        csv_path=folder/f'{cid}.csv'
+        counters={}
+        with csv_path.open('w',encoding='utf-8',newline='') as f:
+            w=csv.writer(f)
+            w.writerow(['Reference','Quantity','Value','Footprint','MPN','Manufacturer','LCSC','Description','DNP'])
+            for row in self._report.get('bom',[]):
+                role=row.get('role') or row
+                comp=row.get('component') or {}
+                qty=max(1,int(role.get('quantity') or role.get('quantity_per_board') or 1))
+                raw_refs=row.get('refs') or ([role.get('reference')] if role.get('reference') else ['U1'])
+                m=re.match(r'^([A-Za-z_]+)',str(raw_refs[0] if raw_refs else 'U1'))
+                prefix=(m.group(1) if m else 'U').upper()
+                start=counters.get(prefix,1)
+                refs=','.join(f'{prefix}{start+i}' for i in range(qty))
+                counters[prefix]=start+qty
+                mpn=str(comp.get('mpn') or role.get('mpn') or '')
+                mfr=str(comp.get('manufacturer') or '')
+                key=str(comp.get('key') or role.get('selected_part') or '')
+                raw_code=key.split(':',1)[1] if ':' in key else ''
+                lcsc=(raw_code if raw_code.upper().startswith('C')
+                      else str(comp.get('supplier_pn') or ((role.get('codes') or [''])[0]) or ''))
+                pkg=str(comp.get('package') or role.get('package') or (role.get('parameters') or {}).get('package') or '')
+                val=mpn or str(role.get('value') or role.get('description') or role.get('name') or '')
+                desc=str(role.get('description') or role.get('name') or '')
+                # Every generated role must be fitted; a missing supplier code leaves the line unmatched, not DNP.
+                w.writerow([refs,qty,val,pkg,mpn,mfr,lcsc,desc,''])
+        title=(self._chat.title[:80] if self._chat and self._chat.title else 'Generated design BOM')
+        if not self._project:self._project=self._projects.create(title)
+        path=self._project_import(csv_path)
+        self._project_job=self._projects.start_job(self._bom_revision,self._bom_session.recorder.run_id)
+        try:
+            with self._bom_memory():
+                self._bom_tool('import_bom',path=str(path),name='project:'+self._project)
+                self._bom_tool('match_parts');self._bom_tool('find_missing_information')
+                reqs=(self._report.get('requirements') or {}).get('requirements') or {}
+                qty_req=reqs.get('board_quantity') if isinstance(reqs,dict) else next((r for r in reqs if r.get('parameter')=='board_quantity'),None)
+                if qty_req and qty_req.get('value') is not None:
+                    qval=str(int(float(qty_req['value'])));quote=qty_req.get('quote') or ''
+                    said=next((m['text'] for m in self._messages if m.get('role')=='user' and quote and quote in m.get('text','')),None)
+                    if qty_req.get('binding') and said:
+                        # Carry the owner's actual recorded words; never synthesise a quote for confirmation.
+                        self._bom_session.recorder.log('user_message',text=said,origin='user',carried_from=qty_req.get('source'))
+                        self._bom_tool('record_requirement',subject='design',parameter='board_quantity',op='==',value=qval,user_quote=quote)
+                    else:
+                        self._bom_tool('record_requirement',subject='design',parameter='board_quantity',op='==',value=qval,user_quote='',
+                                       rationale='Provisional build quantity carried from the generated design')
+                try:self._bom_session.prefetch_candidates(limit=3)
+                except Exception as exc:
+                    self._bom_session.recorder.log('ui_prefetch_incomplete',error=self._error_text(str(exc))[:400])
+                for line,original in list(self._bom_session.baseline.items()):
+                    if not original:continue
+                    try:
+                        self._bom_tool('check_availability',part_key=original.key,line_id=line)
+                        for candidate in self._bom_tool('search_candidates',line_id=line,limit=3).get('candidates',[]):
+                            self._bom_tool('check_substitute',line_id=line,candidate_key=candidate['key'])
+                    except Exception:
+                        pass
+                if self._bom_session._boards() is not None:
+                    try:
+                        self._bom_tool('estimate_cost')
+                        self._bom_tool('compare_cost_scenarios',hypothetical_boards=60)
+                    except Exception:
+                        pass
+            self._publish_bom()
+            self._projects.finish_job(self._project_job,'completed','')
+        finally:
+            self._project_job=None
+        self._status='Generated design BOM loaded into BOM workspace.'
+        return {'path':str(path),'lines':len(self._report.get('bom',[]))}
     def _message(self,role,text,kind='message',**metadata):
         self._store.message(self._chat,role,text,kind=kind,**metadata);self._load_chat()
     def _send(self,p):
@@ -217,6 +300,13 @@ class DesktopBridge:
         if not isinstance(text,str) or not text.strip() or len(text)>5000:raise ValueError('Enter a message of 1–5,000 characters')
         text=text.strip()
         if mode not in {'design','bom'}:raise ValueError('Unsupported conversation mode')
+        if self._busy:
+            # Typed while a job runs: held, then sent in order when it finishes. Nothing is recorded until then.
+            if len(self._queued)>=5:raise ValueError('Up to 5 messages can wait for the current job')
+            self._queued.append({**p,'text':text});self._touch();return 'queued'
+        if self._chat and mode=='bom' and self._selected_bom:
+            # A BOM attached inside an existing conversation starts its own review conversation.
+            bom=self._selected_bom;self._new_chat({});self._selected_bom=bom
         if not self._chat:
             if mode=='bom' and not self._selected_bom:raise ValueError('Attach a BOM or choose the demo first')
             self._chat=self._store.create(text,mode)
@@ -227,6 +317,7 @@ class DesktopBridge:
             if not isinstance(p.get('proposals',True),bool):raise ValueError('Invalid assumptions setting')
             self._start(lambda:self._engine.run(self._chat,text,self._ask,self._notify,self._cancel,
                 bom_path=self._selected_bom,allow_proposals=p.get('proposals',True)),'chat')
+    def _unqueue(self,p):self._queued.clear();self._touch()
     def _start(self,job,kind):
         if self._busy:raise ValueError('An operation is already running')
         if kind=='bom':
@@ -244,11 +335,17 @@ class DesktopBridge:
                     if kind in {'chat','revalidate'}:
                         self._store.append(self._chat,'chat_artifact',**{k:v for k,v in result.items() if k!='text'})
                         self._message('assistant',result['text'],kind='report')
+                        if self._report and self._report.get('mode')=='new_design' and self._report.get('bom'):
+                            try:self._bom_from_design({})
+                            except Exception:pass
                         self._status='Stopped; partial evidence saved.' if result.get('cancelled') else 'Report saved. Missing evidence remains unverified.'
                     elif kind=='commentary':
                         self._message('assistant',result,kind='commentary');self._status='Commentary saved. Engineering results are unchanged.'
                     elif kind=='services':self._services=result;self._status='Service checks saved; availability is separate from engineering acceptance.'
-                    else:self._publish_bom();self._status='BOM operation finished. Review checks and unresolved inputs.'
+                    else:
+                        self._publish_bom();skipped=getattr(self,'_bom_skipped',None);self._bom_skipped=None
+                        self._status=('BOM operation finished. Supplier lookup limit reached for '+', '.join(skipped)+'; those lines stay unverified.'
+                            if skipped else 'BOM operation finished. Review checks and unresolved inputs.')
             except Exception as exc:
                 outcome='failed'
                 with self._lock:
@@ -269,11 +366,17 @@ class DesktopBridge:
                         finally:self._project_job=None
                     self._busy=False;self._question=None;self._question_target=None;self._job_kind=None;self._touch()
                     if self._close_pending and self._window:self._window.destroy()
+                    elif self._queued and not self._cancel.is_set():
+                        queued=self._queued.pop(0)
+                        try:self._send(queued)
+                        except Exception as exc:
+                            self._queued.clear();self._status='Queued message not sent: '+self._error_text(str(exc));self._touch()
         threading.Thread(target=run,daemon=True).start()
     def _notify(self,kind,value):
         with self._lock:
             if kind=='activity':self._activity.append(value);self._status=f"{value['actor']}: {value['name'].replace('_',' ')} · {value['phase']}"
             elif kind=='status':self._status=value
+            elif kind=='assistant_message' and self._chat:self._message('assistant',value,kind='commentary')
             if kind=='activity' and self._project_job and value.get('phase') in {'finished','failed'}:
                 self._publish_bom()
             self._touch()
@@ -284,12 +387,18 @@ class DesktopBridge:
             self._question_target='bom' if self._job_kind=='bom' else 'chat'
             if self._project_job:self._projects.finish_job(self._project_job,'waiting')
             if self._question_target=='chat':self._message('assistant',question,kind='question')
-            self._status='A requirement needs your answer. You can leave it unanswered.';self._touch()
+            self._status=('A requirement needs your answer. '+('Answer in the dialog' if self._question_target=='bom' else 'Reply in chat')
+                +', let AI choose, or leave it unanswered.');self._touch()
         self._answer_ready.wait()
         if self._project_job:self._projects.finish_job(self._project_job,'running')
         return None if self._cancel.is_set() else self._answer
     def _answer_question(self,p):
         if not self._busy or not self._question:raise ValueError('No question is awaiting an answer')
+        if p.get('delegate') is True:
+            if self._question_target=='chat':
+                self._message('user','Let AI choose this one.',kind='requirement_answer')
+            self._answer='__AI_DELEGATE__';self._question=None;self._question_target=None;self._answer_ready.set();self._touch()
+            return
         answer=p.get('text')
         if answer is not None and (not isinstance(answer,str) or not answer.strip() or len(answer)>5000):raise ValueError('Enter an answer or leave it unanswered')
         if self._question_target=='chat':
@@ -339,13 +448,30 @@ class DesktopBridge:
         old=self._staged_settings or self._settings;credentials=dict(old.credentials)
         for key in clear:credentials.pop(key,None)
         credentials.update({k:v for k,v in changes.items() if v})
+        prefs=dict(prefs)
+        if (prefs.get('supplier_mode')=='offline'
+                and any(changes.get(k) for k in ('JLC_APP_ID','JLC_ACCESS_KEY','JLC_SECRET_KEY'))
+                and all(credentials.get(k) for k in ('JLC_APP_ID','JLC_ACCESS_KEY','JLC_SECRET_KEY'))):
+            prefs['supplier_mode']='jlc_zetaris' if (credentials.get('ZETARIS_API_KEY') and prefs.get('ZETARIS_ORG_ID')) else 'jlc'
         value=AppSettings(dict(prefs),credentials).validate()
         from .desktop import catalogs
+        from .local_provider import ensure_local_ollama
+        threading.Thread(target=ensure_local_ollama,args=(value.preferences.get('PARTLENS_LOCAL_URL'),),daemon=True).start()
         prepared=catalogs(value,self._state)
         save_settings(self._home,value);value.apply();self._settings=value;self._catalogs=prepared;self._engine.catalogs=prepared
         self._staged_settings=None;self._services=None;self._demo=example_bom(self._home,synthetic=prefs['supplier_mode']=='offline')
-        self._new_bom();self._new_chat({});self._status='Settings applied. Previous conversations and evidence are preserved.';self._touch()
+        self._new_bom();self._new_chat({});self._status='Settings applied. Previous conversations and evidence are preserved.'
+        if self._setup_needed:self._finish_setup()
+        self._touch()
         return self._settings_view()
+    def _setup_skip(self,p):
+        # Keys can be added later in Settings; existing settings are never rewritten here.
+        if not (self._home/'settings.json').exists():save_settings(self._home,self._settings)
+        self._finish_setup();self._touch()
+    def _finish_setup(self):
+        # First launch is keyed to this marker, not to settings.json, so existing profiles also see setup once.
+        (self._home/'onboarding.json').write_text(json.dumps({'completed':datetime.now(UTC).isoformat(timespec='seconds')}),encoding='utf-8')
+        self._setup_needed=False
     def _notices(self,p):
         root=resource_root();folder=root/'licenses'
         files=sorted(folder.iterdir()) if folder.exists() else [root/'LICENSE',root/'NOTICE',root/'THIRD_PARTY.md']
@@ -394,17 +520,34 @@ class DesktopBridge:
                 self._bom_prepare()
                 self._bom_tool('find_missing_information')
                 if self._bom_session._boards() is None:
-                    reply=self._bom_tool('ask_user',question='How many boards will be assembled? Enter a whole number.',gap_id='design.board_quantity')['answer']
-                    if reply is None:raise ValueError('Build quantity left unanswered; no requirement confirmed')
-                    self._bom_tool('record_requirement',subject='design',parameter='board_quantity',op='==',value=reply.strip(),user_quote=reply)
+                    out=self._bom_tool('ask_user',question='How many boards will be assembled? Enter a whole number.',gap_id='design.board_quantity')
+                    if out.get('delegated_to_ai'):
+                        self._bom_tool('record_requirement',subject='design',parameter='board_quantity',op='==',value='5',user_quote='',rationale='AI provisional default: 5 prototype boards')
+                    else:
+                        reply=out.get('answer')
+                        if reply is None:raise ValueError('Build quantity left unanswered; no requirement confirmed')
+                        self._bom_tool('record_requirement',subject='design',parameter='board_quantity',op='==',value=reply.strip(),user_quote=reply)
+                skipped=self._bom_skipped=[]
+                try:self._bom_session.prefetch_candidates(limit=5)
+                except Exception as exc:
+                    # Per-line discovery below still runs and records its own bounded failures.
+                    self._bom_session.recorder.log('ui_prefetch_incomplete',error=self._error_text(str(exc))[:400])
                 for line,original in list(self._bom_session.baseline.items()):
                     if self._cancel.is_set():break
                     if not original:continue
-                    self._bom_tool('check_availability',part_key=original.key,line_id=line)
-                    for candidate in self._bom_tool('search_candidates',line_id=line,limit=5)['candidates']:
+                    try:
+                        self._bom_tool('check_availability',part_key=original.key,line_id=line)
+                        candidates=self._bom_tool('search_candidates',line_id=line,limit=5)['candidates']
+                    except ValueError as exc:
+                        # A bounded supplier failure leaves this line unverified; other lines still get checked.
+                        skipped.append(line)
+                        self._bom_session.recorder.log('ui_line_incomplete',line=line,error=self._error_text(str(exc))[:400])
+                        continue
+                    for candidate in candidates:
                         self._bom_tool('check_substitute',line_id=line,candidate_key=candidate['key'])
-                self._bom_tool('estimate_cost')
-                self._bom_session.recorder.log('ui_review_complete',mode='deterministic; no model called')
+                if self._bom_session._boards() is not None:
+                    self._bom_tool('estimate_cost')
+                self._bom_session.recorder.log('ui_review_complete',mode='deterministic; no model called',incomplete_lines=skipped)
         self._start(run,'bom')
     def _bom_live(self,p):
         def run():
@@ -460,7 +603,9 @@ def launch(home,settings,catalogs,*,acceptance=None):
     from webview.guilib import initialize
     gui=initialize('edgechromium')
     if gui.renderer!='edgechromium':raise RuntimeError('Install Microsoft WebView2 Runtime and .NET Framework 4.6.2+. No legacy renderer was opened.')
-    home=Path(home).resolve();bridge=DesktopBridge(home,settings,catalogs,token=webview.token)
+    home=Path(home).resolve()
+    bridge=DesktopBridge(home,settings,catalogs,token=webview.token,
+        first_run=acceptance is None and not (home/'onboarding.json').exists())
     webview.settings.update(ALLOW_DOWNLOADS=False,ALLOW_FILE_URLS=False,OPEN_DEVTOOLS_IN_DEBUG=False,
         OPEN_EXTERNAL_LINKS_IN_BROWSER=True)
     window=webview.create_window('PartLens',html=frontend_html(),js_api=bridge,width=1320,height=860,
