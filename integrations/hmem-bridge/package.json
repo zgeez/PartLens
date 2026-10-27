@@ -1,0 +1,15 @@
+{
+  "name": "@cirquill/hmem-bridge",
+  "version": "0.1.0",
+  "description": "JSON-lines stdio bridge between PartLens (Python) and the Meterless H-MEM reference engine.",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "setup": "npx --yes degit meterless/meterless/engines/hmem/reference#1742dec56a66e58eef9dda2d2b865823758ca8cd vendor/hmem --force && cd vendor/hmem && npm install --no-audit --no-fund",
+    "bridge": "tsx bridge.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
