@@ -91,6 +91,31 @@ def test_settings_blank_values_keep_encrypted_credentials_and_clear_is_explicit(
 
 
 @pytest.mark.skipif(os.name!='nt',reason='Windows profile persistence')
+def test_first_start_setup_saves_keys_encrypted_or_skips_once(tmp_path,catalog,monkeypatch):
+    monkeypatch.setattr(os,'environ',os.environ.copy())
+    app=DesktopBridge(tmp_path,AppSettings(),[catalog],token='TEST-native-token',first_run=True)
+    assert call(app,'snapshot')['state']['setup_needed'] is True
+    prefs=call(app,'settings_open')['result']['preferences']
+    keys={'JLC_APP_ID':'TEST-app','JLC_ACCESS_KEY':'TEST-access','JLC_SECRET_KEY':'TEST-first-secret'}
+    monkeypatch.setattr('partlens.desktop.catalogs',lambda settings,state:[catalog])
+    response=call(app,'settings_save',{'preferences':prefs,'credentials':keys,'clear':[]})
+    assert response['ok'] and response['state']['setup_needed'] is False
+    assert response['result']['preferences']['supplier_mode']=='jlc'
+    assert 'TEST-first-secret' not in json.dumps(response) and 'TEST-first-secret' not in (tmp_path/'settings.json').read_text()
+    assert load_settings(tmp_path).credentials==keys
+    assert (tmp_path/'onboarding.json').exists()
+    skipped=DesktopBridge(tmp_path/'skip',AppSettings(),[catalog],token='TEST-native-token',first_run=True)
+    assert call(skipped,'setup_skip')['state']['setup_needed'] is False
+    assert load_settings(tmp_path/'skip').preferences['supplier_mode']=='offline'
+    assert (tmp_path/'skip'/'onboarding.json').exists()
+    # An existing profile also sees setup once; skipping never rewrites its saved settings.
+    save_settings(tmp_path/'existing',AppSettings(credentials={'JLC_SECRET_KEY':'TEST-kept'}))
+    before=(tmp_path/'existing'/'settings.json').read_bytes()
+    existing=DesktopBridge(tmp_path/'existing',load_settings(tmp_path/'existing'),[catalog],token='TEST-native-token',first_run=True)
+    assert call(existing,'setup_skip')['ok'] and (tmp_path/'existing'/'settings.json').read_bytes()==before
+    assert DesktopBridge(tmp_path/'later',AppSettings(),[catalog])._setup_needed is False
+
+
 def test_bad_settings_keep_previous_profile_and_cannot_enable_cloud_fallback(app):
     save_settings(app._home,app._settings);before=(app._home/'settings.json').read_bytes()
     bad={**app._settings.preferences,'PARTLENS_ALLOW_PAID_INFERENCE':'owner_authorized'}
@@ -159,3 +184,23 @@ def test_frontend_is_bundled_without_network_or_dynamic_message_html():
     assert "connect-src 'none'" in html and 'script src=' not in html and 'link href=' not in html
     assert 'innerHTML' not in html and 'localStorage' not in html and 'sessionStorage' not in html
     assert 'settings-page' in html and 'bom-page' in html and 'data:image/png;base64,' in html
+
+
+def test_messages_typed_during_a_job_are_queued_then_sent_in_order(app):
+    gate=threading.Event();received=[]
+    class Engine:
+        def run(self,chat,text,ask,notify,cancel,**kw):
+            received.append(text)
+            if len(received)==1:gate.wait(5)
+            raise ValueError('TEST deliberately incomplete design')
+    app._engine=Engine()
+    assert call(app,'send',{'text':'TEST first','mode':'design'})['ok']
+    queued=call(app,'send',{'text':'TEST typed while busy','mode':'design'})
+    assert queued['result']=='queued' and queued['state']['queued']==['TEST typed while busy']
+    assert not any(m['text']=='TEST typed while busy' for m in app._messages)
+    assert 'Finish or stop' not in (call(app,'select_bom').get('error') or '')
+    gate.set();end=time.monotonic()+5
+    while len(received)<2 and time.monotonic()<end:time.sleep(.02)
+    state=settle(app)
+    assert received==['TEST first','TEST typed while busy'] and state['queued']==[]
+    assert call(app,'send',{'text':'TEST again','mode':'design'})['ok'] and call(app,'unqueue')['ok']

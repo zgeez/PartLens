@@ -255,7 +255,7 @@ def test_unmatched_requested_line_cannot_disappear_from_completion_gate(tmp_path
     a.send("TEST", workflow=replace(request(), lines=("L1", "L4"), max_recoveries=0))
     assert a.last_result.status == "partial"
     assert "L4" in a.last_result.workflow["unmatched_requested_lines"]
-    assert "checks" in a.last_result.workflow["missing_actions"]
+    assert "identities" in a.last_result.workflow["missing_actions"]
 
 
 def test_wrong_hypothetical_quantity_cannot_fulfil_requested_cost_task(tmp_path, catalog):
@@ -282,3 +282,44 @@ def test_model_cannot_substitute_a_different_dielectric_in_a_real_quote(tmp_path
     s.recorder.log("user_message", text="Use X7R dielectric")
     result = s.record_requirement("L1", "dielectric", "==", "Y5V", user_quote="Use X7R dielectric")
     assert not result["binding"]
+
+
+def test_model_reimport_keeps_identities_and_typed_quantity_is_recorded_verbatim(tmp_path, catalog):
+    # Regression for a live run: qwen paraphrased the owner's "1" into a non-verbatim quote, the quantity stayed
+    # unrecorded and the controller blocked every later phase, so the re-imported BOM was never matched.
+    s = Session(RunRecorder.create(tmp_path / "runs"), [catalog], now=NOW)
+    s.import_bom(BOM);s.match_parts()
+    script = [[("import_bom", {"path": BOM})], [("find_missing_information", {})],
+              [("ask_user", {"question": "How many boards will be assembled?", "gap_id": "design.board_quantity"})],
+              *research_script()[2:]]
+    a = Agent(s, ScriptedProvider(script), lambda q: "1")
+    a.send("TEST review", workflow=request(costs=True))
+    assert s.baseline.get("L1")
+    quantity = s.requirements["design.board_quantity"]
+    assert quantity.binding and str(quantity.value) == "1"
+    assert any(e["type"] == "controller_action" and e["tool"] == "record_requirement" for e in read_events(s.recorder.path))
+
+
+def test_unmatched_line_does_not_deadlock_discovery_or_checks(tmp_path, catalog):
+    # Regression for a live run: discovery demanded a search on unmatched L4, which line_choices refused.
+    s = make(tmp_path, catalog)
+    script = [[("import_bom", {"path": BOM})], [("find_missing_information", {})], [("match_parts", {})],
+              [("search_candidates", {"line_id": "L1"})],
+              [("check_substitute", {"line_id": "L1", "candidate_key": GOOD})], "TEST finished"]
+    a = Agent(s, ScriptedProvider(script), lambda q: None)
+    a.send("TEST research", workflow=replace(request(), lines=("L1", "L4")))
+    snap = a.last_result.workflow
+    assert "discovery" not in snap["missing_actions"] and "checks" not in snap["missing_actions"]
+    assert snap["unmatched_requested_lines"] == ["L4"] and a.last_result.status == "partial"
+    assert not any(e["type"] == "controller_recovery" for e in read_events(s.recorder.path))
+
+
+def test_stalled_model_cannot_block_no_input_deterministic_steps(tmp_path, catalog):
+    # Regression for a live chat review: qwen answered with text only while just find_missing_information
+    # was allowed, exhausted recoveries and the chat still reported a recorded review.
+    s = make(tmp_path, catalog)
+    a = Agent(s, ScriptedProvider([[("import_bom", {"path": BOM})]] + ["TEST stalled"] * 8), lambda q: None)
+    a.send("TEST", workflow=replace(request(), max_recoveries=2))
+    actions = [e["tool"] for e in read_events(s.recorder.path) if e["type"] == "controller_action"]
+    assert actions[:2] == ["find_missing_information", "match_parts"]
+    assert a.last_result.status == "partial" and "discovery" in a.last_result.workflow["missing_actions"]

@@ -92,12 +92,14 @@ class WorkflowController:
               "Ask required questions; do not invent answers")
         state("supplier", imported and requirements, supplier, ["import", "requirements"], ["match_parts", "get_part"],
               {"matched": matched, "unmatched": [l for l in lines if l not in matched]}, "Retrieve supplier evidence")
-        state("discovery", supplier, all(l in searches for l in lines), ["supplier"], ["search_candidates", "get_part"],
-              sorted(searches), f"Search independently for alternatives on {sorted(set(lines)-searches)}", req.research)
-        state("checks", supplier, bool(lines) and all(l in checked for l in lines), ["supplier", "discovery"],
+        # Only lines with a supplier identity can be searched or checked; unmatched lines stay reported as
+        # unmatched_requested_lines instead of demanding a search the controller itself would refuse.
+        state("discovery", supplier, all(l in searches for l in matched), ["supplier"], ["search_candidates", "get_part"],
+              sorted(searches), f"Search independently for alternatives on {sorted(set(matched)-searches)}", req.research)
+        state("checks", supplier, all(l in checked for l in matched), ["supplier", "discovery"],
               ["check_substitute", "get_part", "search_candidates", "check_availability"],
               [d["decision_id"] for d in checks],
-              f"Run check_substitute NOW on {sorted(set(lines)-checked)}. Missing application voltages are NOT "
+              f"Run check_substitute NOW on {sorted(set(matched)-checked)}. Missing application voltages are NOT "
               "a prerequisite for original-specification equivalence checks. Choose a candidate from each line's "
               "actual search results and call the tool; it returns unverified when required evidence is absent. "
               "Do not infer or refuse its verdict. Keep full application qualification unknown.", req.research)
@@ -130,6 +132,10 @@ class WorkflowController:
               [{k: r.get(k) for k in ("memory_id", "source", "outcome", "context_matches")} for r in rechecks],
               "Every retrieved decision requires an actual current check, context comparison and an explicit outcome",
               bool(req.recall_run) or bool(self.memories()))
+        # An unmatched requested line keeps the result partial; no model action can resolve it in this run.
+        state("identities", False, not [l for l in lines if l not in matched], ["supplier"], [],
+              {"unmatched": [l for l in lines if l not in matched]},
+              "No supplier identity for these lines; they stay unresolved")
         missing = [s["id"] for s in states if s["status"] in {"pending", "blocked"}]
         for current in states:
             current["permitted_transitions"] = ([s["id"] for s in states if current["id"] in s["prerequisites"]]
