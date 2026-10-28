@@ -5,21 +5,21 @@
     "summary": "A Windows desktop app that designs small electronics boards from an idea and reviews bills of materials: a local AI model investigates while deterministic engineering checks decide compatibility, and missing evidence stays unverified.",
     "licence": "Apache-2.0"
   },
-  "track": "[OWNER: track name]",
+  "track": "Track 02",
   "team": {
     "name": "Cirquill",
     "builders": [
       {
-        "name": "[OWNER: builder name]",
+        "name": "Ziad Ghanem",
         "role": "builder"
       }
     ]
   },
   "repository": "https://github.com/zgeez/PartLens",
   "submission": {
-    "demo_video": "[OWNER: demo video URL]",
-    "slide_deck": "[OWNER: slide deck URL]",
-    "download": "[OWNER: GitHub release or Google Drive link to PartLens.exe]"
+    "demo_video": "https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4",
+    "slide_deck": "docs/PartLens-deck.pdf",
+    "download": "https://github.com/zgeez/PartLens/releases/latest/download/PartLens.exe"
   },
   "sponsors": {
     "zetaris": {
@@ -40,7 +40,9 @@
     "meterless": {
       "status": "working",
       "how": "Meterless H-MEM is PartLens's decision memory. Each verified, rejected or unverified substitution decision is written with its run record, decision ID and checks. Recall brings decisions back in a new session as context, and the workflow controller forces the deterministic checks to run again on current data before reuse.",
-      "engines": ["H-MEM"],
+      "engines": [
+        "H-MEM"
+      ],
       "provider": "none (inference is local Ollama)",
       "where": [
         "src/partlens/memory/hmem.py",
@@ -74,7 +76,12 @@
   "run": {
     "setup": "README.md#quickstart-judges",
     "sample_mode": true,
-    "secrets": ["JLC_APP_ID", "JLC_ACCESS_KEY", "JLC_SECRET_KEY", "ZETARIS_API_KEY"]
+    "secrets": [
+      "JLC_APP_ID",
+      "JLC_ACCESS_KEY",
+      "JLC_SECRET_KEY",
+      "ZETARIS_API_KEY"
+    ]
   },
   "evidence_logs": "Run records are written locally under %LOCALAPPDATA%\\PartLens\\state and are not distributed"
 }

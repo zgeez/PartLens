@@ -11,9 +11,9 @@ with its provenance.
 | Item | Link |
 |---|---|
 | GitHub repository (README) | https://github.com/zgeez/PartLens |
-| Demo video (1–4 min) | **OWNER: add video URL** |
-| Slide deck | **OWNER: add slides URL** |
-| Live demo / Windows executable | **OWNER: add Google Drive link to `PartLens.exe`** (desktop app; there is no hosted web demo) |
+| Demo video (1–4 min) | [PartLens-demo.mp4](https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4) (2:32, narrated) |
+| Slide deck | [docs/PartLens-deck.pdf](../PartLens-deck.pdf) (10 slides) |
+| Live demo / Windows executable | [PartLens.exe](https://github.com/zgeez/PartLens/releases/latest/download/PartLens.exe) from the latest GitHub release (desktop app; there is no hosted web demo) |
 | Start guide | [docs/START-GUIDE.md](../START-GUIDE.md) |
 
 ## Headline demo

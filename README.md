@@ -1,29 +1,51 @@
-# PartLens
+<p align="center">
+  <img src="assets/brand/logo-96.png" alt="PartLens logo" width="96" height="96">
+</p>
 
-![PartLens logo](assets/brand/logo-96.png)
+<h1 align="center">PartLens</h1>
 
-**Evidence before confidence.** PartLens is a Windows desktop app that designs small electronics boards from an
-idea and reviews bills of materials. A local AI model investigates; deterministic engineering checks decide
-compatibility. Missing evidence stays **unverified** — never a quiet yes.
+<p align="center"><strong>Evidence before confidence.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4">Watch the video</a> ·
+  <a href="#quickstart-judges">Try it</a> ·
+  <a href="docs/PartLens-deck.pdf">Slide deck</a> ·
+  <a href="#sponsor-technology">Sponsor technology</a> ·
+  <a href="docs/START-GUIDE.md">Start guide</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4"><img src="docs/media/demo-thumbnail.jpg" alt="PartLens rejecting an XC6206 LDO on current and thermal checks and switching to a TPS63031 buck-boost" width="100%"></a>
+</p>
+
+<p align="center"><a href="https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4"><strong>Watch the demo (2:32)</strong></a></p>
+
+A cheaper or substitute part can still break a board: its voltage, current, thermal limit or package has to fit
+the exact circuit, and chat assistants sound sure even when that evidence is missing.
+
+**PartLens is a Windows desktop app that designs small electronics boards from an idea and reviews bills of
+materials.** A local AI model investigates; deterministic engineering checks decide compatibility. Missing
+evidence stays **unverified**, never a quiet yes.
 
 | | |
 |---|---|
-| **Team** | Cirquill |
-| **Track** | [OWNER: track name] |
-| **Repository** | [github.com/zgeez/PartLens](https://github.com/zgeez/PartLens) |
-| **Status** | Submitted — preliminary designs, clearly labelled |
-| **Video** | [OWNER: demo video URL] (2 min 32 s, narrated, recorded from the real app) |
-| **Deck** | [OWNER: slide deck URL] (10 slides) |
-| **Download** | [OWNER: GitHub release or Google Drive link to `PartLens.exe`] (Windows x64, single file) |
+| **Event** | Open Agent Hackathon 2026, 22–27 October 2026 |
+| **Track** | Track 02 |
+| **Team** | Cirquill (Ziad Ghanem) |
+| **Status** | Hackathon submission. Designs are preliminary and labelled as such; nothing is marked working that you can't run. |
+| **Video** | [PartLens-demo.mp4](https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4) (2:32, 1080p, narrated): a live run of the breadboard power supply design with the local model, official JLCPCB, Zetaris and Meterless H-MEM. Narration is Windows text-to-speech. |
+| **Deck** | [docs/PartLens-deck.pdf](docs/PartLens-deck.pdf) (10 slides): problem, workflows, architecture, live demo, Zetaris, Meterless, NVIDIA, trust rules, limits |
+| **Download** | [PartLens.exe](https://github.com/zgeez/PartLens/releases/latest/download/PartLens.exe) from the [latest release](https://github.com/zgeez/PartLens/releases/latest) (Windows x64, single file, 50 MB) |
 | **Licence** | [Apache-2.0](LICENSE) |
 
 [Quickstart (judges)](#quickstart-judges) · [What it does](#what-it-does) ·
 [Sponsor technology](#sponsor-technology) · [Pre-existing components](#pre-existing-components) ·
-[Where to look](#where-to-look-judging-criteria--repository) · [Start guide](docs/START-GUIDE.md)
+[Where to look](#where-to-look-judging-criteria--repository)
 
 ## Quickstart (judges)
 
-**Option A — the app (no install).** Download `PartLens.exe` and double-click it. It needs the Windows
+**Option A — the app (no install).** Download
+[`PartLens.exe`](https://github.com/zgeez/PartLens/releases/latest/download/PartLens.exe) and double-click it. It needs the Windows
 WebView2 Runtime (present on Windows 11). On first launch, **Add your API keys** asks for your own JLCPCB and
 optional Zetaris keys; **Skip for now** runs with clearly labelled synthetic data. A guided tour follows.
 For the AI features install [Ollama](https://ollama.com) and run `ollama pull qwen3.5:9b`.
@@ -129,7 +151,7 @@ Full disclosure: [DISCLOSURE.md](docs/hackathon/DISCLOSURE.md).
 | Impact (30) | [What it does](#what-it-does); [start guide](docs/START-GUIDE.md) |
 | Technical execution (20) | [`workflow.py`](src/partlens/workflow.py) controller, [`checks/`](src/partlens/checks), [`tests/`](tests) (392 tests) |
 | Innovation (15) | [Architecture](#architecture): model proposes, rules decide; recalled memory is rechecked, never trusted |
-| Demo (15) | Video in the table above; [Quickstart (judges)](#quickstart-judges) |
+| Demo (15) | [Video](https://github.com/zgeez/PartLens/releases/latest/download/PartLens-demo.mp4), [deck](docs/PartLens-deck.pdf), [Quickstart (judges)](#quickstart-judges) |
 | Product and UX (10) | [`assets/desktop/`](assets/desktop): first-launch setup, guided tour, Evidence inspector |
 | Sponsor technology (10) | [Sponsor technology](#sponsor-technology) |
 
